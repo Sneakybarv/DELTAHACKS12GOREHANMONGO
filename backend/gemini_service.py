@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 import pytesseract
 import re
+import logging
 
 load_dotenv()
 
@@ -153,7 +154,7 @@ async def extract_receipt_data(image_bytes: bytes) -> Dict:
         # Step 1: Extract text from image
         receipt_text = extract_text_from_image(image_bytes)
         
-        print(f"Extracted text ({len(receipt_text)} chars):\n{receipt_text[:500]}...")
+        logging.getLogger(__name__).info("Extracted text (%d chars): %s...", len(receipt_text), receipt_text[:200].replace('\n',' '))
         
         # Step 2: Use Gemini to parse the text into structured data
         prompt = f"""You are a receipt data extractor. Extract ONLY the following information from this receipt text in JSON format:
@@ -240,11 +241,11 @@ JSON Output:"""
 
     except Exception as e:
         error_str = str(e)
-        print(f"Error extracting receipt data: {e}")
+        logging.getLogger(__name__).exception("Error extracting receipt data: %s", e)
         
         # Check if it's a quota error - return mock data
         if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
-            print("⚠️ Gemini API quota exhausted - using mock data from OCR text")
+            logging.getLogger(__name__).warning("Gemini API quota exhausted - using mock data from OCR text")
             
             # Parse merchant from OCR text with better detection
             merchant = "Unknown"
@@ -535,7 +536,7 @@ async def analyze_receipt_health(items: List[Dict]) -> Dict:
         return health_data
 
     except Exception as e:
-        print(f"Error analyzing health data: {e}")
+        logging.getLogger(__name__).exception("Error analyzing health data: %s", e)
         # Return default safe response
         return {
             "allergen_alerts": [],

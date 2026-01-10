@@ -7,6 +7,7 @@ from pymongo.server_api import ServerApi
 import os
 from dotenv import load_dotenv
 from typing import Optional
+import logging
 
 load_dotenv()
 
@@ -26,14 +27,14 @@ class Database:
             tlsAllowInvalidCertificates=True  # For development only
         )
         cls.db = cls.client.receipt_scanner
-        print("Connected to MongoDB Atlas")
+        logging.getLogger(__name__).info("Connected to MongoDB Atlas")
 
     @classmethod
     async def close_db(cls):
         """Close MongoDB connection"""
         if cls.client:
             cls.client.close()
-            print("MongoDB connection closed")
+            logging.getLogger(__name__).info("MongoDB connection closed")
 
     @classmethod
     def get_db(cls):
@@ -77,7 +78,8 @@ async def get_receipt_by_id(receipt_id: str):
     collection = await get_receipts_collection()
     receipt = await collection.find_one({"_id": ObjectId(receipt_id)})
     if receipt:
-        receipt["_id"] = str(receipt["_id"])
+        receipt["id"] = str(receipt["_id"])
+        receipt.pop("_id", None)
     return receipt
 
 async def get_all_receipts(limit: int = 10, offset: int = 0, user_id: Optional[str] = None):
@@ -91,7 +93,8 @@ async def get_all_receipts(limit: int = 10, offset: int = 0, user_id: Optional[s
     receipts = await cursor.to_list(length=limit)
 
     for receipt in receipts:
-        receipt["_id"] = str(receipt["_id"])
+        receipt["id"] = str(receipt["_id"])
+        receipt.pop("_id", None)
 
     total = await collection.count_documents(query)
     return {"receipts": receipts, "total": total}
@@ -118,12 +121,17 @@ async def delete_receipt(receipt_id: str):
 async def create_or_update_user_profile(user_id: str, profile_data: dict):
     """Create or update user profile"""
     collection = await get_users_collection()
-    result = await collection.update_one(
+    await collection.update_one(
         {"user_id": user_id},
         {"$set": profile_data},
         upsert=True
     )
-    return result
+
+    # Return the saved profile document
+    profile = await collection.find_one({"user_id": user_id})
+    if profile:
+        profile["id"] = str(profile.pop("_id"))
+    return profile
 
 async def get_user_profile(user_id: str):
     """Get user profile"""

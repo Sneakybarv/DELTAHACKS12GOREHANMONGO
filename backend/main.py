@@ -4,6 +4,7 @@ FastAPI backend with Gemini AI and MongoDB integration
 """
 
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request, Header
+import logging
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict
@@ -36,6 +37,10 @@ app = FastAPI(
     description="Accessibility-first receipt processing with AI",
     version="1.0.0"
 )
+
+# Configure simple logging for the backend
+logging.basicConfig(level=logging.INFO)
+
 
 # Get environment
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
@@ -132,7 +137,7 @@ async def upload_receipt(
         try:
             receipt_data = await extract_receipt_data(image_bytes)
         except Exception as gemini_error:
-            print(f"Gemini API error: {gemini_error}")
+            logging.getLogger(__name__).exception("Gemini API error: %s", gemini_error)
             raise HTTPException(
                 status_code=500,
                 detail=f"Gemini Vision AI failed to process receipt: {str(gemini_error)[:100]}"
@@ -163,7 +168,7 @@ async def upload_receipt(
             receipt_data["id"] = receipt_id
         except Exception as db_error:
             # Database errors are non-critical but log them
-            print(f"Database save failed (non-critical): {str(db_error)[:200]}")
+            logging.getLogger(__name__).warning("Database save failed (non-critical): %s", str(db_error)[:200])
             pass  # Continue with temp ID
 
         return {
@@ -175,7 +180,7 @@ async def upload_receipt(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Error processing receipt: {e}")
+        logging.getLogger(__name__).exception("Error processing receipt: %s", e)
         raise HTTPException(
             status_code=500,
             detail="Failed to process receipt. Please try again with a clearer image."
@@ -218,7 +223,7 @@ async def analyze_receipt(
         return insights
     
     except Exception as e:
-        print(f"Error analyzing receipt: {e}")
+        logging.getLogger(__name__).exception("Error analyzing receipt: %s", e)
         raise HTTPException(
             status_code=500,
             detail="Failed to analyze receipt. Please try again."
@@ -249,7 +254,7 @@ async def get_receipts(
         result = await get_all_receipts(limit=limit, offset=offset)
         return result
     except Exception as e:
-        print(f"Error fetching receipts: {e}")
+        logging.getLogger(__name__).exception("Error fetching receipts: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch receipts")
 
 @app.get("/api/receipts/{receipt_id}")
@@ -275,7 +280,7 @@ async def get_receipt(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error fetching receipt: {e}")
+        logging.getLogger(__name__).exception("Error fetching receipt: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch receipt")
 
 @app.get("/api/dashboard/stats")
@@ -350,7 +355,7 @@ async def get_dashboard_stats(
             "health_score_trend": health_score_trend
         }
     except Exception as e:
-        print(f"Error calculating dashboard stats: {e}")
+        logging.getLogger(__name__).exception("Error calculating dashboard stats: %s", e)
         # Return default values on error
         return {
             "money_at_risk": 0,
@@ -441,7 +446,7 @@ async def test_ocr(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        print(f"Error in OCR test: {e}")
+        logging.getLogger(__name__).exception("Error in OCR test: %s", e)
         raise HTTPException(status_code=500, detail=f"OCR test failed: {str(e)}")
 
 @app.post("/api/text-to-speech")
@@ -491,8 +496,31 @@ async def update_user_profile(
 
         return {"status": "updated", "profile": profile}
     except Exception as e:
-        print(f"Error updating user profile: {e}")
+        logging.getLogger(__name__).exception("Error updating user profile: %s", e)
         raise HTTPException(status_code=500, detail="Failed to update profile")
+
+
+@app.get("/api/user/profile")
+async def get_user_profile_endpoint(
+    request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
+    _: None = Depends(rate_limit_check)
+):
+    """
+    Retrieve user profile (uses X-User-Id header or falls back to 'default_user')
+    """
+    try:
+        user_id = sanitize_user_input(x_user_id, max_length=100) if x_user_id else "default_user"
+        profile = await get_user_profile(user_id)
+        if not profile:
+            return {"status": "ok", "profile": {"allergies": [], "dietary_preferences": [], "health_goals": []}}
+
+        # Remove internal _id before returning
+        profile.pop("_id", None)
+        return {"status": "ok", "profile": profile}
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error fetching user profile: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to fetch user profile")
 
 
 @app.get("/api/users/{user_id}/receipts")
@@ -515,7 +543,7 @@ async def get_user_receipts(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error fetching user receipts: {e}")
+        logging.getLogger(__name__).exception("Error fetching user receipts: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch user receipts")
 
 if __name__ == "__main__":
