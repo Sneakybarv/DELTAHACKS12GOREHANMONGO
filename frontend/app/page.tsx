@@ -32,27 +32,28 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-12 max-w-6xl">
         {/* Header with read-aloud button */}
-        <div className="flex justify-between items-center mb-8">
-          <h1 className="text-5xl font-bold text-gray-900">
-            Receipt Scanner
-          </h1>
-          <button
-            onClick={() => speaking ? stopSpeaking() : speakText(pageDescription)}
-            className="btn-primary flex items-center gap-2"
-            aria-label={speaking ? "Stop reading page" : "Read page aloud"}
-          >
-            {speaking ? <FiVolumeX size={24} /> : <FiVolume2 size={24} />}
-            <span>{speaking ? 'Stop' : 'Read Aloud'}</span>
-          </button>
+        <div className="relative mb-8">
+          <h1 className="text-6xl font-bold text-gray-900 text-center absolute left-1/2 transform -translate-x-1/2">BiteWise</h1>
+
+          <div className="flex justify-end items-center">
+            <button
+              onClick={() => speaking ? stopSpeaking() : speakText(pageDescription)}
+              className="btn-primary flex items-center gap-2"
+              aria-label={speaking ? "Stop reading page" : "Read page aloud"}
+            >
+              {speaking ? <FiVolumeX size={24} /> : <FiVolume2 size={24} />}
+              <span>{speaking ? 'Stop' : 'Read Aloud'}</span>
+            </button>
+          </div>
         </div>
 
         {/* Hero section */}
         <section className="text-center mb-16">
-          <h2 className="text-3xl font-semibold text-gray-800 mb-4">
+          <h2 className="text-3xl font-semibold text-gray-800 mb-5">
             Turn food receipts into health insights
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-            Upload any grocery or restaurant receipt. We flag allergens,
+            Upload any grocery or restaurant receipt. <br></br> We flag allergens,
             highlight nutrition risks, and summarize your week.
           </p>
 
@@ -71,7 +72,7 @@ export default function Home() {
 
         {/* How it works */}
         <section className="mb-16">
-          <h2 className="text-3xl font-bold text-center mb-10">How It Works</h2>
+          <h2 className="text-3xl text-black font-bold text-center mb-8">How It Works</h2>
           <div className="grid md:grid-cols-4 gap-6">
             <div className="card text-center">
               <div className="text-5xl mb-4">📸</div>
@@ -109,43 +110,37 @@ export default function Home() {
 
         {/* Features - Accessibility focused */}
         <section className="mb-16">
-          <h2 className="text-3xl font-bold text-center mb-10">
-            Built for Everyone
-          </h2>
+          <h2 className="text-3xl font-bold text-black text-center mb-8">Built for Everyone</h2>
           <div className="grid md:grid-cols-3 gap-8">
+
             <div className="card">
-              <div className="text-4xl mb-4">♿</div>
-              <h3 className="text-xl font-semibold mb-3">Fully Accessible</h3>
+              <div className="text-2xl font-semibold text-black mb-3">Fully Accessible ♿</div>
               <ul className="text-gray-600 space-y-2">
-                <li>✓ Screen reader support</li>
+                <li>✓ Screen Reader Support</li>
                 <li>✓ Keyboard navigation</li>
-                <li>✓ High contrast mode</li>
-                <li>✓ Large text options</li>
-                <li>✓ Voice commands</li>
+                <li>✓ Dark Mode</li>
+                {/* <li>✓ High contrast mode</li> */}
+                {/* <li>✓ Large text options</li> */}
               </ul>
             </div>
 
             <div className="card">
-              <FiHeart className="text-4xl mb-4 text-red-500" />
-              <h3 className="text-xl font-semibold mb-3">Health First</h3>
+              <div className="text-2xl font-semibold text-black mb-3">Health First ❤️</div>
               <ul className="text-gray-600 space-y-2">
-                <li>✓ Allergen alerts</li>
-                <li>✓ Nutrition analysis</li>
-                <li>✓ Custom dietary tracking</li>
-                <li>✓ Health score trends</li>
-                <li>✓ Smart suggestions</li>
+                <li>✓ Allergen Alerts</li>
+                <li>✓ Nutrition Analysis</li>
+                <li>✓ Health Score Trends</li>
+                <li>✓ Smart Suggestions</li>
               </ul>
             </div>
 
             <div className="card">
-              <div className="text-4xl mb-4">🔒</div>
-              <h3 className="text-xl font-semibold mb-3">Privacy First</h3>
+              <div className="text-2xl font-semibold text-black mb-3">Privacy First 🔒</div>
               <ul className="text-gray-600 space-y-2">
-                <li>✓ No bank account access</li>
-                <li>✓ You control your data</li>
-                <li>✓ Local processing option</li>
-                <li>✓ Delete anytime</li>
-                <li>✓ No data selling</li>
+                <li>✓ No Bank Account Access</li>
+                <li>✓ You Control Your Data</li>
+                <li>✓ Delete Receipts Anytime</li>
+                <li>✓ No Data Selling</li>
               </ul>
             </div>
           </div>
@@ -153,9 +148,7 @@ export default function Home() {
 
         {/* Example alerts */}
         <section className="mb-16">
-          <h2 className="text-3xl font-bold text-center mb-10">
-            Example Insights
-          </h2>
+          <h2 className="text-3xl font-bold text-black text-center mb-8">Example Insights</h2>
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
             {/* Allergen alert example */}
             <div className="card border-l-4 border-red-500">
@@ -196,8 +189,8 @@ export default function Home() {
         </section>
 
         {/* CTA */}
-        <section className="text-center">
-          <div className="card bg-blue-600 text-white max-w-2xl mx-auto">
+        {/* <section className="text-center">
+          <div className="card bg-blue-600 text-black max-w-2xl mx-auto">
             <h2 className="text-3xl font-bold mb-4">Ready to get started?</h2>
             <p className="text-xl mb-6">
               Scan your first receipt and discover your health insights
@@ -206,7 +199,7 @@ export default function Home() {
               Scan Now
             </Link>
           </div>
-        </section>
+        </section> */}
       </div>
     </div>
   )
