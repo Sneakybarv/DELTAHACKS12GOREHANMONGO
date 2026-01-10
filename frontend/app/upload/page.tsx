@@ -3,14 +3,18 @@
 import { useState, useRef } from 'react'
 import { FiUpload, FiCamera, FiCheck, FiVolume2 } from 'react-icons/fi'
 import { useRouter } from 'next/navigation'
+import { useReceipt } from '@/contexts/ReceiptContext'
+import { uploadReceipt } from '@/lib/api'
 
 export default function UploadPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [receiptType, setReceiptType] = useState<'grocery' | 'restaurant'>('grocery')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
+  const { setCurrentReceipt, setReceiptImage } = useReceipt()
 
   const handleFileSelect = (file: File) => {
     if (file && file.type.startsWith('image/')) {
@@ -45,30 +49,30 @@ export default function UploadPage() {
     if (!selectedFile) return
 
     setUploading(true)
-    announceToScreenReader('Uploading and processing receipt...')
+    setError(null)
+    announceToScreenReader('Uploading and processing receipt with Gemini Vision AI...')
 
     try {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('type', receiptType)
-
-      // TODO: Replace with actual API call
-      // const response = await fetch('http://localhost:8000/api/receipts/upload', {
-      //   method: 'POST',
-      //   body: formData,
-      // })
-      // const data = await response.json()
-
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 2000))
-
-      announceToScreenReader('Receipt processed successfully')
-
-      // Navigate to review page
-      router.push('/review')
-    } catch (error) {
+      // Upload to backend with Gemini Vision processing
+      const response = await uploadReceipt(selectedFile, receiptType)
+      
+      if (response.status === 'success' && response.data) {
+        // Store receipt data in context
+        setCurrentReceipt(response.data)
+        setReceiptImage(preview)
+        
+        announceToScreenReader(`Receipt processed successfully. Merchant: ${response.data.merchant}, Total: $${response.data.total}`)
+        
+        // Navigate to review page with real data
+        router.push('/review')
+      } else {
+        throw new Error('Invalid response from server')
+      }
+    } catch (error: any) {
       console.error('Upload error:', error)
-      announceToScreenReader('Error uploading receipt. Please try again.')
+      const errorMessage = error.message || 'Error uploading receipt. Please try again.'
+      setError(errorMessage)
+      announceToScreenReader(errorMessage)
     } finally {
       setUploading(false)
     }
@@ -229,25 +233,37 @@ export default function UploadPage() {
 
         {/* Process button */}
         {selectedFile && (
-          <div className="text-center">
-            <button
-              onClick={handleUpload}
-              disabled={uploading}
-              className="btn-primary btn-large inline-flex items-center gap-3"
-              aria-busy={uploading}
-            >
-              {uploading ? (
-                <>
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
-                  <span>Processing Receipt...</span>
-                </>
-              ) : (
-                <>
-                  <FiCheck size={24} />
-                  <span>Generate Health Insights</span>
-                </>
-              )}
-            </button>
+          <div className="space-y-4">
+            {/* Error message */}
+            {error && (
+              <div className="card bg-red-50 border-red-200">
+                <p className="text-red-800 font-semibold">❌ {error}</p>
+                <p className="text-sm text-red-600 mt-2">
+                  Make sure the backend is running and GEMINI_API_KEY is set.
+                </p>
+              </div>
+            )}
+
+            <div className="text-center">
+              <button
+                onClick={handleUpload}
+                disabled={uploading}
+                className="btn-primary btn-large inline-flex items-center gap-3"
+                aria-busy={uploading}
+              >
+                {uploading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
+                    <span>Processing with Gemini Vision...</span>
+                  </>
+                ) : (
+                  <>
+                    <FiCheck size={24} />
+                    <span>Generate Health Insights</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
 

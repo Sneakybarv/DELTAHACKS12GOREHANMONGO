@@ -1,31 +1,34 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { FiEdit2, FiCheck, FiTrash2, FiPlus } from 'react-icons/fi'
-
-// Mock data - will be replaced with real API data
-const mockReceiptData = {
-  merchant: "Whole Foods Market",
-  date: "2026-01-10",
-  items: [
-    { name: "Organic Milk", price: 4.99, category: "dairy" },
-    { name: "Almond Butter", price: 8.99, category: "nuts" },
-    { name: "Whole Wheat Bread", price: 3.49, category: "grains" },
-    { name: "Fresh Strawberries", price: 5.99, category: "produce" },
-    { name: "Greek Yogurt", price: 6.49, category: "dairy" },
-  ],
-  total: 29.95,
-}
+import { useReceipt } from '@/contexts/ReceiptContext'
+import { analyzeReceipt } from '@/lib/api'
 
 export default function ReviewPage() {
   const router = useRouter()
-  const [items, setItems] = useState(mockReceiptData.items)
-  const [merchant, setMerchant] = useState(mockReceiptData.merchant)
-  const [date, setDate] = useState(mockReceiptData.date)
+  const { currentReceipt, setCurrentReceipt, setHealthInsights, receiptImage } = useReceipt()
+  
+  const [items, setItems] = useState(currentReceipt?.items || [])
+  const [merchant, setMerchant] = useState(currentReceipt?.merchant || '')
+  const [date, setDate] = useState(currentReceipt?.date || '')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editPrice, setEditPrice] = useState('')
+  const [analyzing, setAnalyzing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Redirect if no receipt data
+  useEffect(() => {
+    if (!currentReceipt) {
+      router.push('/upload')
+    } else {
+      setItems(currentReceipt.items)
+      setMerchant(currentReceipt.merchant)
+      setDate(currentReceipt.date)
+    }
+  }, [currentReceipt, router])
 
   const startEdit = (index: number) => {
     setEditingIndex(index)
@@ -58,9 +61,36 @@ export default function ReviewPage() {
     announceToScreenReader('New item added')
   }
 
-  const handleAnalyze = () => {
-    announceToScreenReader('Analyzing receipt for health insights')
-    router.push('/results')
+  const handleAnalyze = async () => {
+    setAnalyzing(true)
+    setError(null)
+    announceToScreenReader('Analyzing receipt for health insights with Gemini AI...')
+
+    try {
+      // Update receipt with edited data
+      const updatedReceipt = {
+        ...currentReceipt!,
+        merchant,
+        date,
+        items,
+        total: items.reduce((sum, item) => sum + (item.price || 0), 0)
+      }
+      setCurrentReceipt(updatedReceipt)
+
+      // Call backend to analyze with Gemini
+      const insights = await analyzeReceipt(updatedReceipt)
+      setHealthInsights(insights)
+      
+      announceToScreenReader(`Analysis complete. Health score: ${insights.health_score}`)
+      router.push('/results')
+    } catch (error: any) {
+      console.error('Analysis error:', error)
+      const errorMessage = error.message || 'Failed to analyze receipt'
+      setError(errorMessage)
+      announceToScreenReader(errorMessage)
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   const announceToScreenReader = (message: string) => {
@@ -79,9 +109,17 @@ export default function ReviewPage() {
           {/* Left: Receipt preview */}
           <div className="card">
             <h2 className="text-2xl font-semibold mb-4">Receipt Image</h2>
-            <div className="bg-gray-200 rounded-lg aspect-[3/4] flex items-center justify-center text-gray-500">
-              <span>Receipt Preview</span>
-            </div>
+            {receiptImage ? (
+              <img 
+                src={receiptImage} 
+                alt="Receipt" 
+                className="w-full rounded-lg"
+              />
+            ) : (
+              <div className="bg-gray-200 rounded-lg aspect-[3/4] flex items-center justify-center text-gray-500">
+                <span>No Image Available</span>
+              </div>
+            )}
           </div>
 
           {/* Right: Extracted data */}
@@ -206,12 +244,29 @@ export default function ReviewPage() {
             </div>
 
             {/* Analyze button */}
+            {error && (
+              <div className="card bg-red-50 border-red-200 mb-4">
+                <p className="text-red-800 font-semibold">❌ {error}</p>
+              </div>
+            )}
+            
             <button
               onClick={handleAnalyze}
+              disabled={analyzing}
               className="btn-primary btn-large w-full flex items-center justify-center gap-3"
+              aria-busy={analyzing}
             >
-              <FiCheck size={24} />
-              <span>Generate Health Insights</span>
+              {analyzing ? (
+                <>
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
+                  <span>Analyzing with Gemini AI...</span>
+                </>
+              ) : (
+                <>
+                  <FiCheck size={24} />
+                  <span>Generate Health Insights</span>
+                </>
+              )}
             </button>
           </div>
         </div>

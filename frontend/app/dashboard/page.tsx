@@ -1,7 +1,9 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { FiTrendingUp, FiAlertTriangle, FiShoppingBag } from 'react-icons/fi'
+import { getDashboardStats } from '@/lib/api'
 
 // Mock dashboard data
 const mockStats = {
@@ -42,6 +44,36 @@ const mockRecentReceipts = [
 ]
 
 export default function DashboardPage() {
+  const [stats, setStats] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchStats() {
+      try {
+        const data = await getDashboardStats()
+        setStats(data)
+      } catch (err: any) {
+        console.error('Error fetching dashboard stats:', err)
+        setError(err.message)
+        // Use mock data as fallback
+        setStats(mockStats)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchStats()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 flex items-center justify-center">
+        <div className="text-xl text-gray-600">Loading dashboard...</div>
+      </div>
+    )
+  }
+
+  const currentStats = stats || mockStats
   const getDeadlineBadge = (daysLeft: number) => {
     if (daysLeft > 7) {
       return <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">{daysLeft} days left</span>
@@ -80,10 +112,10 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div className="text-3xl font-bold text-red-700">
-                  ${mockStats.money_at_risk.toFixed(2)}
+                  ${currentStats.money_at_risk.toFixed(2)}
                 </div>
                 <div className="text-sm text-red-600 font-semibold">Money at Risk</div>
-                <div className="text-xs text-red-600">{mockStats.receipts_expiring_soon} receipts expiring soon</div>
+                <div className="text-xs text-red-600">{currentStats.receipts_expiring_soon} receipts expiring soon</div>
               </div>
             </div>
           </div>
@@ -95,8 +127,8 @@ export default function DashboardPage() {
                 <FiTrendingUp className="text-3xl text-blue-600" />
               </div>
               <div>
-                <div className={`text-3xl font-bold ${getHealthScoreColor(mockStats.health_score_avg)}`}>
-                  {mockStats.health_score_avg}
+                <div className={`text-3xl font-bold ${getHealthScoreColor(currentStats.health_score_avg)}`}>
+                  {currentStats.health_score_avg}
                 </div>
                 <div className="text-sm text-blue-600 font-semibold">Avg Health Score</div>
                 <div className="text-xs text-blue-600">This week</div>
@@ -112,7 +144,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div className="text-3xl font-bold text-yellow-700">
-                  {mockStats.allergen_alerts_this_week}
+                  {currentStats.allergen_alerts_this_week}
                 </div>
                 <div className="text-sm text-yellow-600 font-semibold">Allergen Alerts</div>
                 <div className="text-xs text-yellow-600">This week</div>
@@ -128,7 +160,7 @@ export default function DashboardPage() {
               </div>
               <div>
                 <div className="text-3xl font-bold text-green-700">
-                  {mockStats.paper_saved_count}
+                  {currentStats.paper_saved_count}
                 </div>
                 <div className="text-sm text-green-600 font-semibold">Receipts Digitized</div>
                 <div className="text-xs text-green-600">Paper saved!</div>
@@ -141,7 +173,7 @@ export default function DashboardPage() {
         <div className="card mb-8">
           <h2 className="text-2xl font-semibold mb-4">Health Score Trend</h2>
           <div className="flex items-end justify-between gap-2 h-48">
-            {mockStats.health_score_trend.map((score, index) => (
+            {currentStats.health_score_trend.map((score, index) => (
               <div key={index} className="flex-1 flex flex-col items-center gap-2">
                 <div
                   className="w-full bg-blue-500 rounded-t"
@@ -154,12 +186,12 @@ export default function DashboardPage() {
             ))}
           </div>
           <div className="mt-4 text-center text-sm text-gray-600">
-            <span className={`font-semibold ${getHealthScoreColor(mockStats.health_score_avg)}`}>
-              Average: {mockStats.health_score_avg}
+            <span className={`font-semibold ${getHealthScoreColor(currentStats.health_score_avg)}`}>
+              Average: {currentStats.health_score_avg}
             </span>
             {' • '}
             <span className="text-green-600">
-              Trend: {mockStats.health_score_trend[mockStats.health_score_trend.length - 1] > mockStats.health_score_trend[0] ? '↑ Improving' : '→ Stable'}
+              Trend: {currentStats.health_score_trend[currentStats.health_score_trend.length - 1] > currentStats.health_score_trend[0] ? '↑ Improving' : '→ Stable'}
             </span>
           </div>
         </div>
