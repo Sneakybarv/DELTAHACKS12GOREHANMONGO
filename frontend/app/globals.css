@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Accessibility-focused global styles */
+
+:root {
+  --color-primary: #0066cc;
+  --color-success: #008800;
+  --color-warning: #cc6600;
+  --color-danger: #cc0000;
+  --color-bg: #ffffff;
+  --color-text: #000000;
+
+  /* High contrast mode colors */
+  --color-border: #333333;
+  --color-focus: #0066cc;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1a1a1a;
+    --color-text: #ffffff;
+    --color-border: #cccccc;
+  }
+}
+
+/* High contrast mode */
+.high-contrast {
+  --color-bg: #000000;
+  --color-text: #ffffff;
+  --color-primary: #66b3ff;
+  --color-success: #00ff00;
+  --color-warning: #ffaa00;
+  --color-danger: #ff0000;
+  --color-border: #ffffff;
+}
+
+body {
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Focus styles for keyboard navigation (WCAG 2.1) */
+*:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Remove outline for mouse users */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Skip to main content link (accessibility) */
+.skip-to-main {
+  position: absolute;
+  left: -9999px;
+  z-index: 999;
+  padding: 1rem;
+  background: var(--color-primary);
+  color: white;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.skip-to-main:focus {
+  left: 50%;
+  transform: translateX(-50%);
+  top: 1rem;
+}
+
+/* Accessible buttons */
+.btn-primary {
+  @apply bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold;
+  @apply hover:bg-blue-700 focus:ring-4 focus:ring-blue-300;
+  @apply transition-all duration-200;
+  min-height: 44px; /* WCAG touch target size */
+  min-width: 44px;
+}
+
+.btn-secondary {
+  @apply bg-gray-200 text-gray-800 px-6 py-3 rounded-lg font-semibold;
+  @apply hover:bg-gray-300 focus:ring-4 focus:ring-gray-300;
+  @apply transition-all duration-200;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white px-6 py-3 rounded-lg font-semibold;
+  @apply hover:bg-red-700 focus:ring-4 focus:ring-red-300;
+  @apply transition-all duration-200;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+.btn-large {
+  @apply px-8 py-4 text-lg;
+  min-height: 60px;
+}
+
+/* Accessible cards */
+.card {
+  @apply bg-white rounded-xl shadow-lg p-6 border border-gray-200;
+  @apply hover:shadow-xl transition-shadow duration-200;
+}
+
+.high-contrast .card {
+  @apply border-white border-2;
+}
+
+/* Accessible form inputs */
+.input {
+  @apply w-full px-4 py-3 border-2 border-gray-300 rounded-lg;
+  @apply focus:border-blue-500 focus:ring-2 focus:ring-blue-200;
+  @apply text-base;
+  min-height: 44px;
+}
+
+.high-contrast .input {
+  @apply border-white text-white bg-black;
+}
+
+/* Screen reader only content */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Large text mode */
+.large-text {
+  font-size: 1.25rem;
+  line-height: 1.8;
+}
+
+.large-text h1 {
+  font-size: 3rem;
+}
+
+.large-text h2 {
+  font-size: 2.25rem;
+}
+
+.large-text p, .large-text li {
+  font-size: 1.25rem;
+}
+
+.large-text button {
+  font-size: 1.5rem;
+  padding: 1rem 1.5rem;
+}

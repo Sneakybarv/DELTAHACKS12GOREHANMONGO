@@ -1,0 +1,269 @@
+'use client'
+
+import { useState, useRef } from 'react'
+import { FiUpload, FiCamera, FiCheck, FiVolume2 } from 'react-icons/fi'
+import { useRouter } from 'next/navigation'
+
+export default function UploadPage() {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [receiptType, setReceiptType] = useState<'grocery' | 'restaurant'>('grocery')
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const router = useRouter()
+
+  const handleFileSelect = (file: File) => {
+    if (file && file.type.startsWith('image/')) {
+      setSelectedFile(file)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setPreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+
+      // Announce to screen readers
+      announceToScreenReader(`Image selected: ${file.name}`)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const file = e.dataTransfer.files[0]
+    if (file) {
+      handleFileSelect(file)
+    }
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      handleFileSelect(file)
+    }
+  }
+
+  const handleUpload = async () => {
+    if (!selectedFile) return
+
+    setUploading(true)
+    announceToScreenReader('Uploading and processing receipt...')
+
+    try {
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('type', receiptType)
+
+      // TODO: Replace with actual API call
+      // const response = await fetch('http://localhost:8000/api/receipts/upload', {
+      //   method: 'POST',
+      //   body: formData,
+      // })
+      // const data = await response.json()
+
+      // Simulate upload delay
+      await new Promise(resolve => setTimeout(resolve, 2000))
+
+      announceToScreenReader('Receipt processed successfully')
+
+      // Navigate to review page
+      router.push('/review')
+    } catch (error) {
+      console.error('Upload error:', error)
+      announceToScreenReader('Error uploading receipt. Please try again.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const speakInstructions = () => {
+    const text = "Upload receipt page. You can drag and drop a receipt image, use the file picker button, or use your camera to capture a receipt. After uploading, click Generate Health Insights to analyze the receipt."
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.rate = 0.9
+    window.speechSynthesis.speak(utterance)
+  }
+
+  const announceToScreenReader = (message: string) => {
+    const announcer = document.getElementById('a11y-announcer')
+    if (announcer) {
+      announcer.textContent = message
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+      <div className="container mx-auto px-4 max-w-4xl">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900">Upload Receipt</h1>
+          <button
+            onClick={speakInstructions}
+            className="btn-secondary flex items-center gap-2"
+            aria-label="Read page instructions"
+          >
+            <FiVolume2 size={20} />
+            <span>Instructions</span>
+          </button>
+        </div>
+
+        {/* Receipt type selector */}
+        <div className="card mb-8">
+          <label className="block text-lg font-semibold mb-4">
+            Receipt Type
+          </label>
+          <div className="flex gap-4" role="radiogroup" aria-label="Receipt type">
+            <button
+              onClick={() => setReceiptType('grocery')}
+              className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                receiptType === 'grocery'
+                  ? 'border-blue-600 bg-blue-50'
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+              role="radio"
+              aria-checked={receiptType === 'grocery'}
+            >
+              <div className="text-3xl mb-2">🛒</div>
+              <div className="font-semibold">Grocery</div>
+              <div className="text-sm text-gray-600">Supermarket, food store</div>
+            </button>
+
+            <button
+              onClick={() => setReceiptType('restaurant')}
+              className={`flex-1 p-4 rounded-lg border-2 transition-all ${
+                receiptType === 'restaurant'
+                  ? 'border-blue-600 bg-blue-50'
+                  : 'border-gray-300 hover:border-gray-400'
+              }`}
+              role="radio"
+              aria-checked={receiptType === 'restaurant'}
+            >
+              <div className="text-3xl mb-2">🍽️</div>
+              <div className="font-semibold">Restaurant</div>
+              <div className="text-sm text-gray-600">Dining, takeout, delivery</div>
+            </button>
+          </div>
+        </div>
+
+        {/* Upload area */}
+        <div className="card mb-8">
+          <h2 className="text-2xl font-semibold mb-6">Upload Image</h2>
+
+          {!preview ? (
+            <div
+              onDrop={handleDrop}
+              onDragOver={(e) => e.preventDefault()}
+              className="border-4 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-400 transition-colors"
+              role="button"
+              tabIndex={0}
+              aria-label="Drop receipt image here or click to browse"
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  fileInputRef.current?.click()
+                }
+              }}
+            >
+              <FiUpload className="mx-auto text-6xl text-gray-400 mb-4" />
+              <p className="text-xl font-semibold text-gray-700 mb-2">
+                Drop receipt image here
+              </p>
+              <p className="text-gray-600 mb-4">or</p>
+              <button
+                className="btn-primary btn-large"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  fileInputRef.current?.click()
+                }}
+              >
+                <FiCamera className="inline mr-2" size={24} />
+                Browse Files
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileInputChange}
+                className="hidden"
+                aria-label="Choose receipt image file"
+              />
+            </div>
+          ) : (
+            <div>
+              <div className="mb-4">
+                <img
+                  src={preview}
+                  alt="Receipt preview"
+                  className="max-w-full h-auto rounded-lg border-2 border-gray-300 mx-auto"
+                  style={{ maxHeight: '500px' }}
+                />
+              </div>
+              <div className="flex gap-4 justify-center">
+                <button
+                  onClick={() => {
+                    setSelectedFile(null)
+                    setPreview(null)
+                    announceToScreenReader('Image removed')
+                  }}
+                  className="btn-secondary"
+                >
+                  Remove Image
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="btn-secondary"
+                >
+                  <FiCamera className="inline mr-2" />
+                  Choose Different Image
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleFileInputChange}
+                  className="hidden"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Process button */}
+        {selectedFile && (
+          <div className="text-center">
+            <button
+              onClick={handleUpload}
+              disabled={uploading}
+              className="btn-primary btn-large inline-flex items-center gap-3"
+              aria-busy={uploading}
+            >
+              {uploading ? (
+                <>
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white" />
+                  <span>Processing Receipt...</span>
+                </>
+              ) : (
+                <>
+                  <FiCheck size={24} />
+                  <span>Generate Health Insights</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Accessibility notes */}
+        <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+            <span>♿</span> Accessibility Tips
+          </h3>
+          <ul className="text-sm text-blue-800 space-y-1">
+            <li>• Use keyboard: Tab to navigate, Enter/Space to activate buttons</li>
+            <li>• Drag & drop or click the upload area to select a file</li>
+            <li>• On mobile, use camera button to take a photo directly</li>
+            <li>• Screen readers will announce processing status</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  )
+}
