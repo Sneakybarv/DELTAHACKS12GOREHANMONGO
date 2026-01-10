@@ -168,7 +168,7 @@ export default function ProfilePage() {
                   onChange={(e) => setNewAllergy(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addAllergy()}
                   placeholder="Add allergen..."
-                  className="input flex-1"
+                  className="input flex-1 bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 rounded px-2 py-1"
                 />
                 <button onClick={addAllergy} className="btn-secondary">
                   <FiPlus size={18} />
@@ -210,7 +210,7 @@ export default function ProfilePage() {
                   onChange={(e) => setNewPref(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && addPref()}
                   placeholder="Add preference..."
-                  className="input flex-1"
+                  className="input flex-1 bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 rounded px-2 py-1"
                 />
                 <button onClick={addPref} className="btn-secondary">
                   <FiPlus size={18} />
@@ -253,7 +253,7 @@ export default function ProfilePage() {
                 onChange={(e) => setNewGoal(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && addGoal()}
                 placeholder="Add health goal..."
-                className="input flex-1"
+                className="input flex-1 bg-white border border-gray-300 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-400 rounded px-2 py-1"
               />
               <button onClick={addGoal} className="btn-secondary">
                 <FiPlus size={18} />
