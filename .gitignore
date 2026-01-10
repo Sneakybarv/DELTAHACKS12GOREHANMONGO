@@ -61,6 +61,10 @@ coverage/
 logs/
 *.log
 
+# Ignore local runtime folders and docs output
+.local/
+docs/
+
 # Temporary files
 tmp/
 temp/

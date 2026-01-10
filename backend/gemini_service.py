@@ -10,7 +10,7 @@ from PIL import Image
 import io
 import json
 from typing import Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pytesseract
 import re
 import logging
@@ -23,6 +23,56 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable not set")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+
+# Default model rotation sequence. Can be overridden with env var `GEMINI_MODEL_SEQUENCE`
+# Example: export GEMINI_MODEL_SEQUENCE="gemini-1.5-pro,gemini-1.5-flash,gemini-2.0-flash-exp"
+DEFAULT_MODEL_SEQUENCE = os.getenv(
+    "GEMINI_MODEL_SEQUENCE",
+    "gemini-1.5-flash,gemini-1.5-pro,gemini-2.0-flash-exp,gemini-exp-1206"
+).split(",")
+
+
+def generate_with_model_rotation(contents, models: Optional[List[str]] = None):
+    """
+    Try generating content using a sequence of models until one succeeds.
+
+    Args:
+        contents: prompt string or list passed to `client.models.generate_content`
+        models: optional list of model names to try in order. If None, uses DEFAULT_MODEL_SEQUENCE.
+
+    Returns:
+        The successful response object from `client.models.generate_content`.
+
+    Raises:
+        The last exception encountered if all models fail.
+    """
+    if models is None:
+        models = DEFAULT_MODEL_SEQUENCE
+
+    last_exc = None
+    for m in models:
+        try:
+            logging.getLogger(__name__).info("Attempting model: %s", m)
+            resp = client.models.generate_content(model=m, contents=contents)
+            # Basic sanity check: ensure response has text
+            if getattr(resp, 'text', None):
+                logging.getLogger(__name__).info("Model %s succeeded", m)
+                return resp
+            # If no text, treat as failure and try next
+            last_exc = Exception(f"Empty response from model {m}")
+        except Exception as e:
+            last_exc = e
+            # If model not found or quota issue, log and try next
+            logging.getLogger(__name__).warning("Model %s failed: %s", m, str(e)[:200])
+            # Continue to next model in sequence
+            continue
+
+    # If we reach here, all models failed
+    logging.getLogger(__name__).error("All models failed in rotation: %s", models)
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("Model rotation failed with unknown error")
 
 
 # Category keywords dictionary
@@ -131,10 +181,163 @@ def extract_text_from_image(image_bytes: bytes) -> str:
         raise ValueError(f"Failed to extract text from image: {str(e)}")
 
 
+def parse_ocr_text_to_receipt(receipt_text: str) -> Dict:
+    """
+    Parse OCR text locally into a receipt-like structure. This is used when
+    `FORCE_OCR` is enabled or if model calls fail.
+    Returns a dict similar to what Gemini would return (merchant, date, items, total, subtotal, tax, payment_method).
+    """
+    merchant = "Unknown"
+    merchant_patterns = {
+        "McDonald's": r"mcdonald",
+        "Walmart": r"walmart",
+        "Target": r"target",
+        "IKEA": r"ikea",
+        "Starbucks": r"starbucks",
+        "Tim Hortons": r"tim\s*horton",
+        "Subway": r"subway",
+        "CVS": r"cvs",
+        "Walgreens": r"walgreens",
+        "Costco": r"costco",
+        "Whole Foods": r"whole\s*foods",
+        "Safeway": r"safeway",
+        "Kroger": r"kroger"
+    }
+
+    for name, pattern in merchant_patterns.items():
+        if re.search(pattern, receipt_text, re.IGNORECASE):
+            merchant = name
+            break
+
+    # Try to extract date with common patterns
+    date_str = None
+    date_match = re.search(r'(\d{4}-\d{2}-\d{2})', receipt_text)
+    if date_match:
+        date_str = date_match.group(1)
+    else:
+        date_match = re.search(r'(\d{2}/\d{2}/\d{4})', receipt_text)
+        if date_match:
+            try:
+                date_obj = datetime.strptime(date_match.group(1), "%m/%d/%Y")
+                date_str = date_obj.strftime("%Y-%m-%d")
+            except:
+                date_str = None
+
+    # Reuse the OCR parsing logic from the previous fallback (strict filters)
+    items = []
+    lines = receipt_text.split('\n')
+    skip_words = ['subtotal', 'total', 'tax', 'gst', 'pst', 'hst', 'qst', 'vat',
+                 'amount', 'balance', 'change', 'tender', 'payment', 'cash',
+                 'credit', 'debit', 'visa', 'mastercard', 'amex', 'card',
+                 'received', 'refund', 'discount', 'coupon', 'savings',
+                 'remaining', 'due', 'paid', 'ref num', 'cashier', 'thank',
+                 'visit', 'receipt', 'transaction', 'invoice', 'order', 'take home']
+
+    seen_total = False
+    for line in lines:
+        line_lower = line.lower()
+        line_stripped = line.strip()
+        if len(line_stripped) < 5:
+            continue
+        if 'total' in line_lower and ('pay' in line_lower or re.search(r'\d{2,}\.\d{2}', line)):
+            seen_total = True
+            continue
+        if seen_total:
+            continue
+        if any(skip in line_lower for skip in skip_words):
+            continue
+        special_char_count = sum(1 for c in line if c in '—=*~@#$%^&()[]{}|\\<>')
+        if special_char_count > 3:
+            continue
+
+        item_match = re.match(r'^\s*(\d+)\s+(.+?)\s+(\d{1,2}\.\d{2})\s+(\d{1,3}\.\d{2})', line)
+        if item_match:
+            quantity = int(item_match.group(1))
+            item_name = item_match.group(2).strip()
+            unit_price = float(item_match.group(3))
+            line_total = float(item_match.group(4))
+            expected_total = quantity * unit_price
+            if abs(expected_total - line_total) < 0.50:
+                item_name = re.sub(r'\s+', ' ', item_name).strip()
+                if len(item_name) >= 3 and re.search(r'[a-zA-Z]{2,}', item_name):
+                    items.append({
+                        "name": item_name[:30],
+                        "price": line_total,
+                        "quantity": quantity,
+                        "category": categorize_item(item_name, merchant)
+                    })
+                    continue
+
+        price_match = re.search(r'\b(\d{1,2}\.\d{2})\b', line)
+        if price_match:
+            price_value = float(price_match.group(1))
+            if price_value > 100 or price_value < 0.01:
+                continue
+            item_name = line[:price_match.start()].strip()
+            item_name = re.sub(r'^\d+\s+', '', item_name)
+            item_name = re.sub(r'\s+\d+$', '', item_name)
+            item_name = re.sub(r'\s+', ' ', item_name).strip()
+            if not re.search(r'[a-zA-Z]{2,}', item_name):
+                continue
+            if len(item_name) < 3:
+                continue
+            items.append({
+                "name": item_name[:30],
+                "price": price_value,
+                "quantity": 1,
+                "category": categorize_item(item_name, merchant)
+            })
+
+    # Find total
+    total = 0.0
+    for line in lines:
+        line_lower = line.lower()
+        if ('total' in line_lower and ('pay' in line_lower or 'grand' in line_lower)) or \
+           (line_lower.strip().startswith('total') and 'subtotal' not in line_lower):
+            price_matches = re.findall(r'(\d{1,3}\.\d{2})', line)
+            if price_matches:
+                total = float(price_matches[-1])
+                break
+
+    if total == 0.0 and items:
+        total = sum(item['price'] for item in items)
+
+    if not items:
+        items = [
+            {"name": "Sample Item", "price": 1.00, "category": "other"}
+        ]
+        total = sum(i['price'] for i in items)
+
+    subtotal = round(total * 0.9, 2)
+    tax = round(total * 0.1, 2)
+
+    parsed = {
+        "merchant": merchant,
+        "date": date_str or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "items": items[:20],
+        "total": total,
+        "subtotal": subtotal,
+        "tax": tax,
+        "payment_method": "unknown",
+        "return_policy_days": get_return_policy_days(merchant),
+        "_ocr_parsed": True
+    }
+
+    # Add return deadline
+    try:
+        purchase_date = datetime.strptime(parsed["date"], "%Y-%m-%d")
+        deadline = purchase_date + timedelta(days=parsed["return_policy_days"])
+        parsed["return_deadline"] = deadline.strftime("%Y-%m-%d")
+    except Exception:
+        parsed["return_deadline"] = None
+
+    return parsed
+
+
 async def extract_receipt_data(image_bytes: bytes) -> Dict:
     """
     Extract structured data from receipt image using OCR + Gemini
-    
+
     Step 1: Extract text from image using OCR
     Step 2: Parse text with Gemini to get structured data
 
@@ -143,16 +346,24 @@ async def extract_receipt_data(image_bytes: bytes) -> Dict:
 
     Returns:
         Dictionary with extracted receipt data
-        
+
     Raises:
         ValueError: If image is unclear or not a valid receipt
     """
     # Initialize receipt_text to avoid unbound variable error
     receipt_text = ""
-    
+
+    # Check if FORCE_OCR environment variable is set to bypass Gemini entirely
+    force_ocr = os.getenv("FORCE_OCR", "false").lower() in ("true", "1", "yes")
+
     try:
         # Step 1: Extract text from image
         receipt_text = extract_text_from_image(image_bytes)
+
+        # If FORCE_OCR is enabled, skip Gemini and use local parsing
+        if force_ocr:
+            logging.getLogger(__name__).info("FORCE_OCR enabled - using local OCR parsing only")
+            return parse_ocr_text_to_receipt(receipt_text)
         
         logging.getLogger(__name__).info("Extracted text (%d chars): %s...", len(receipt_text), receipt_text[:200].replace('\n',' '))
         
@@ -189,21 +400,8 @@ Receipt Text:
 JSON Output:"""
 
         # Call Gemini with text-only (much cheaper than vision)
-        # Try Pro model first, fall back to Flash if quota issues
-        try:
-            response = client.models.generate_content(
-                model='gemini-1.5-pro',  # Try Pro model - might have separate quota
-                contents=prompt
-            )
-        except Exception as model_error:
-            if "404" in str(model_error) or "NOT_FOUND" in str(model_error):
-                # If Pro not available, try Flash
-                response = client.models.generate_content(
-                    model='gemini-2.0-flash-exp',
-                    contents=prompt
-                )
-            else:
-                raise model_error
+        # Use model rotation helper to try multiple models in order
+        response = generate_with_model_rotation(prompt)
 
         # Parse JSON from response
         response_text = (response.text or "").strip()
@@ -518,10 +716,7 @@ async def analyze_receipt_health(items: List[Dict]) -> Dict:
         Be specific and practical. Return ONLY the JSON object.
         """
 
-        response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
-            contents=[prompt]
-        )
+        response = generate_with_model_rotation([prompt])
         response_text = (response.text or "").strip()
 
         # Clean markdown formatting

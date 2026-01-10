@@ -17,14 +17,8 @@
   --color-focus: #0066cc;
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #1a1a1a;
-    --color-text: #ffffff;
-    --color-border: #cccccc;
-  }
-}
+/* Dark mode support - removed to prevent white text issues */
+/* Users can enable dark mode via the accessibility toolbar */
 
 /* High contrast mode */
 .high-contrast {
@@ -154,12 +148,12 @@ body {
 }
 
 .dark body {
-  background: #1a1a1a;
-  color: #f0f0f0;
+  background: #1a1a1a !important;
+  color: #f0f0f0 !important;
 }
 
 .dark .card {
-  @apply bg-gray-800 border-gray-700;
+  @apply bg-gray-800 border-gray-700 text-white;
 }
 
 .dark .btn-secondary {
@@ -168,6 +162,26 @@ body {
 
 .dark .input {
   @apply bg-gray-800 text-white border-gray-600;
+}
+
+/* Force text visibility in dark mode */
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  @apply text-white;
+}
+
+.dark p, .dark span, .dark div, .dark label {
+  color: #f0f0f0 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700,
+.dark .text-gray-600 {
+  @apply text-gray-200 !important;
+}
+
+.dark .bg-white {
+  @apply bg-gray-800 !important;
 }
 
 /* Large text mode */

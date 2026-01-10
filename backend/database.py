@@ -8,6 +8,10 @@ import os
 from dotenv import load_dotenv
 from typing import Optional
 import logging
+import secrets
+from datetime import datetime, timezone, timedelta
+from typing import List, Optional
+import hashlib
 
 load_dotenv()
 
@@ -63,6 +67,64 @@ async def get_analytics_collection():
     if db is None:
         raise RuntimeError("Database not connected. Call Database.connect_db() first.")
     return db.analytics
+
+
+async def get_api_keys_collection():
+    """Get api_keys collection"""
+    db = Database.get_db()
+    if db is None:
+        raise RuntimeError("Database not connected. Call Database.connect_db() first.")
+    return db.api_keys
+
+
+async def create_api_key(owner: str = "owner", scope: Optional[List[str]] = None, expires_seconds: int = 60 * 60 * 24):
+    """Create and store a new API key. Returns the plaintext token and the inserted id."""
+    if scope is None:
+        scope = ["write"]
+
+    token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=expires_seconds)
+
+    collection = await get_api_keys_collection()
+    doc = {
+        "owner": owner,
+        "token_hash": token_hash,
+        "scope": scope,
+        "created_at": now.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "active": True,
+    }
+    result = await collection.insert_one(doc)
+    return token, str(result.inserted_id)
+
+
+async def get_api_key_by_hash(token_hash: str):
+    collection = await get_api_keys_collection()
+    key = await collection.find_one({"token_hash": token_hash})
+    return key
+
+
+async def validate_api_key(token: str):
+    """Validate a plaintext token. Returns the key doc if valid, else None."""
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    key = await get_api_key_by_hash(token_hash)
+    if not key:
+        return None
+
+    if not key.get("active", True):
+        return None
+
+    try:
+        expires_at = datetime.fromisoformat(key.get("expires_at"))
+    except Exception:
+        return None
+
+    if expires_at < datetime.now(timezone.utc):
+        return None
+
+    return key
 
 
 # CRUD operations for receipts

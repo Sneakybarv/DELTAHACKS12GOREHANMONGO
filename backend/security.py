@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 import hashlib
 import time
+import os
+from fastapi import Depends
+from database import validate_api_key
+import logging
 
 # Simple rate limiting (in-memory for hackathon, use Redis in production)
 request_counts = {}
@@ -190,3 +194,34 @@ def get_cors_origins(environment: str) -> list:
             "http://127.0.0.1:3001",
             "http://127.0.0.1:3002",
         ]
+
+
+async def require_api_key(x_api_key: Optional[str] = Header(None, alias='X-Api-Key')):
+    """
+    API key dependency. Supports two modes:
+    - If `JUDGE_API_KEY` env var is set, allow that value as a global key (backcompat).
+    - Otherwise validate the provided `X-Api-Key` against the `api_keys` collection.
+    Raises 401 if missing/invalid.
+    """
+    expected = os.getenv('JUDGE_API_KEY')
+    if expected:
+        if not x_api_key:
+            raise HTTPException(status_code=401, detail='Missing X-Api-Key')
+        if x_api_key != expected:
+            raise HTTPException(status_code=401, detail='Invalid API key')
+        return True
+
+    # If no global key is configured, validate against DB-stored judge keys
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail='Missing X-Api-Key')
+
+    try:
+        key_doc = await validate_api_key(x_api_key)
+    except Exception as e:
+        logging.getLogger(__name__).exception('API key validation error: %s', e)
+        raise HTTPException(status_code=401, detail='Invalid API key')
+
+    if not key_doc:
+        raise HTTPException(status_code=401, detail='Invalid or expired API key')
+
+    return True

@@ -19,7 +19,8 @@ from security import (
     validate_image_upload,
     sanitize_user_input,
     validate_receipt_data,
-    get_cors_origins
+    get_cors_origins,
+    require_api_key
 )
 from gemini_service import (
     extract_receipt_data,
@@ -600,6 +601,34 @@ async def get_user_receipts(
     except Exception as e:
         logging.getLogger(__name__).exception("Error fetching user receipts: %s", e)
         raise HTTPException(status_code=500, detail="Failed to fetch user receipts")
+
+
+@app.post("/api/admin/issue-key")
+async def issue_api_key(
+    owner: Optional[str] = None,
+    expires_hours: int = 24,
+    request: Request = None,
+    x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key")
+):
+    """
+    Admin-only endpoint to issue a short-lived judge API key.
+    Protect this with `ADMIN_KEY` environment variable via `X-Admin-Key` header.
+    Returns the plaintext token once.
+    """
+    ADMIN_KEY = os.getenv('ADMIN_KEY')
+    if not ADMIN_KEY:
+        raise HTTPException(status_code=403, detail="Admin key not configured")
+
+    if not x_admin_key or x_admin_key != ADMIN_KEY:
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+
+    try:
+        from database import create_api_key
+        token, inserted_id = await create_api_key(owner=owner or 'judge', expires_seconds=expires_hours * 3600)
+        return {"status": "ok", "token": token, "id": inserted_id, "expires_in_hours": expires_hours}
+    except Exception as e:
+        logging.getLogger(__name__).exception('Failed to create API key: %s', e)
+        raise HTTPException(status_code=500, detail='Failed to create API key')
 
 if __name__ == "__main__":
     import uvicorn

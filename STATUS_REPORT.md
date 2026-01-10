@@ -1,10 +1,6 @@
-# Application Status Report
+This file has been moved to `docs/STATUS_REPORT.md`.
+Please open the documentation in the `docs/` directory.
 
-**Date:** January 10, 2026  
-**Backend:** Running on http://localhost:8000  
-**Frontend:** Running on http://localhost:3001
-
----
 
 ## ✅ WORKING - Backend API Endpoints
 

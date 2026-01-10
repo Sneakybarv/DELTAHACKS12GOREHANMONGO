@@ -1,7 +1,5 @@
-README for Judges — Local Website Setup
-=====================================
-
-This guide explains how to run the Receipt Scanner website locally for judging/demo purposes. It focuses on the minimal steps a judge needs to launch the frontend and backend on macOS and verify the site works. Keep credentials private (do not share your `MONGODB_URI` or any API keys).
+This file has been moved to `docs/README_FOR_JUDGES.md`.
+Please open the documentation in the `docs/` directory.
 
 Prerequisites
 -------------
@@ -97,3 +95,44 @@ If anything above fails during the judging session, collect the following and sh
 - Contents of `backend/.env` (redact secrets before sharing)
 
 Thank you — good luck with judging!
+
+Judge API Keys
+--------------
+For security, judges should never receive third-party service keys. Instead, the owner issues short-lived judge API tokens which the judge includes in requests via the `X-Api-Key` header.
+
+How it works (owner):
+- Set an `ADMIN_KEY` environment variable on the machine running the backend.
+- Call the admin endpoint to create a judge token (the token is shown once):
+
+```bash
+export ADMIN_KEY="your_admin_key_here"
+bash scripts/issue_judge_key.sh judge_name 24
+```
+
+The script calls `POST /api/admin/issue-key` and prints a JSON response containing the plaintext `token` (store it securely; it will expire).
+
+How judges use the token:
+- Include the token in requests with the `X-Api-Key` header.
+
+Example: update profile (judge):
+
+```bash
+curl -X POST http://localhost:8000/api/user/profile \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: <judge-token-here>" \
+  -d '{"allergies":["Peanuts"],"dietary_preferences":["Vegan"],"health_goals":["Run 3x/week"]}'
+```
+
+Example: upload receipt (judge):
+
+```bash
+curl -X POST http://localhost:8000/api/receipts/upload \
+  -H "X-Api-Key: <judge-token-here>" \
+  -H "X-User-Id: judge1" \
+  -F "file=@/path/to/receipt.jpg"
+```
+
+Security notes:
+- Tokens are short-lived and can be revoked by the owner (admin).
+- The owner should provide tokens to judges over a secure channel and never embed them in public places.
+

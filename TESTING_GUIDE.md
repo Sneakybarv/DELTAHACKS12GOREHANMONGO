@@ -1,9 +1,8 @@
-# 🧪 Testing Guide - Full Gemini Vision Integration
-
+This file has been moved to `docs/TESTING_GUIDE.md`.
+Please open the documentation in the `docs/` directory.
 ## ✅ All Integration Complete!
 
 **Status:** Frontend is now fully connected to backend with Gemini Vision AI
-
 ---
 
 ## 🚀 Quick Start
