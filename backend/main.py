@@ -128,7 +128,14 @@ async def upload_receipt(
         validate_image_upload(image_bytes, max_size_mb=10)
 
         # Process receipt with Gemini Vision API
-        receipt_data = await extract_receipt_data(image_bytes)
+        try:
+            receipt_data = await extract_receipt_data(image_bytes)
+        except Exception as gemini_error:
+            print(f"Gemini API error: {gemini_error}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Gemini Vision AI failed to process receipt: {str(gemini_error)[:100]}"
+            )
 
         # Generate accessible text summary
         text_summary = await generate_receipt_summary_text(receipt_data)
@@ -138,14 +145,17 @@ async def upload_receipt(
         receipt_data["image_size_bytes"] = len(image_bytes)
         receipt_data["processed_at"] = datetime.now(timezone.utc).isoformat()
 
-        # Try to store receipt in database (optional - app works without it)
+        # Generate a temporary ID (database save is optional)
+        receipt_data["id"] = f"temp_{int(datetime.now(timezone.utc).timestamp())}"
+
+        # Try to store receipt in database (completely optional)
         try:
-            receipt_id = await create_receipt(receipt_data)
+            receipt_id = await create_receipt(receipt_data.copy())
             receipt_data["id"] = receipt_id
         except Exception as db_error:
-            print(f"Database error (non-critical): {db_error}")
-            # Generate a temporary ID
-            receipt_data["id"] = f"temp_{datetime.now(timezone.utc).timestamp()}"
+            # Database errors are non-critical
+            print(f"Database save failed (non-critical): {str(db_error)[:100]}")
+            pass  # Continue with temp ID
 
         return {
             "status": "success",
