@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { FiHeart, FiAlertTriangle, FiEdit3, FiPlus, FiX, FiSave } from 'react-icons/fi'
-import { updateUserProfile, getDashboardStats, getReceipts } from '@/lib/api'
+import { updateUserProfile, getDashboardStats, getReceipts, getUserProfile } from '@/lib/api'
 
 export default function ProfilePage() {
   const [editing, setEditing] = useState(false)
@@ -21,9 +21,13 @@ export default function ProfilePage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [statsData, receiptsData] = await Promise.all([
+        const [statsData, receiptsData, profileData] = await Promise.all([
           getDashboardStats(),
-          getReceipts(100, 0)
+          getReceipts(100, 0),
+          // load saved profile (if any)
+          (async () => {
+            try { return await getUserProfile() } catch { return null }
+          })()
         ])
 
         setTotalReceipts(statsData.total_receipts)
@@ -31,6 +35,13 @@ export default function ProfilePage() {
 
         const total = receiptsData.receipts.reduce((sum, r: any) => sum + (r.total || 0), 0)
         setTotalSpent(total)
+
+        // If profile exists on backend, populate fields
+        if (profileData) {
+          setAllergies(profileData.allergies || [])
+          setDietaryPrefs(profileData.dietary_preferences || [])
+          setHealthGoals(profileData.health_goals || [])
+        }
       } catch (error) {
         console.error('Error fetching profile data:', error)
       }
