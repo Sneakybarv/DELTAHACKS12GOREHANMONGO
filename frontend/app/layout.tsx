@@ -1,10 +1,11 @@
+import { useState, useEffect } from 'react'
 import type { Metadata } from 'next'
 import './globals.css'
 import AccessibilityToolbar from '@/components/AccessibilityToolbar'
 import { ReceiptProvider } from '@/contexts/ReceiptContext'
 
 export const metadata: Metadata = {
-  title: 'Receipt Scanner - Accessible Health Insights',
+  title: 'BiteWise - Accessible Health Insights',
   description: 'Turn receipts into health insights with full accessibility support',
 }
 
