@@ -32,10 +32,10 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # Default model rotation sequence. Can be overridden with env var `GEMINI_MODEL_SEQUENCE`
-# Example: export GEMINI_MODEL_SEQUENCE="gemini-1.5-pro,gemini-1.5-flash,gemini-2.0-flash-exp"
+# Uses multiple models in order of preference for better reliability
 DEFAULT_MODEL_SEQUENCE = os.getenv(
     "GEMINI_MODEL_SEQUENCE",
-    "gemini-2.5-flash-native-audio-dialog"
+    "gemini-2.5-flash"
 ).split(",")
 
 
@@ -220,21 +220,51 @@ def validate_and_correct_receipt(receipt_data: Dict, merchant: str = "") -> Dict
             corrections_made.append("price_suspiciously_high")
         
         item["quantity"] = quantity
-        item["price"] = round(price, 2)
-        item_line_total = round(quantity * price, 2)
-        items_total += item_line_total
-        
-        # Ensure unit_price is set (if not present, calculate from price/quantity)
-        if "unit_price" not in item:
+
+        # Handle price and unit_price relationship
+        # IMPORTANT: "price" should be the LINE TOTAL (quantity × unit_price)
+        unit_price = item.get("unit_price")
+
+        if unit_price is not None:
+            try:
+                unit_price = float(unit_price)
+            except (ValueError, TypeError):
+                unit_price = None
+
+        if unit_price is not None and unit_price > 0:
+            # If Gemini provided unit_price, verify math and correct price if needed
+            expected_line_total = round(unit_price * quantity, 2)
+            if abs(price - expected_line_total) > 0.10:
+                # price and unit_price don't match - trust unit_price and recalculate
+                logging.getLogger(__name__).warning(
+                    f"Item '{item.get('name')}': price ${price:.2f} != unit_price ${unit_price:.2f} × qty {quantity} = ${expected_line_total:.2f}, using calculated total"
+                )
+                price = expected_line_total
+                corrections_made.append("price_recalculated_from_unit_price")
+            item["unit_price"] = round(unit_price, 2)
+            item["price"] = round(price, 2)
+        else:
+            # No unit_price provided - "price" is the LINE TOTAL, calculate unit_price from it
+            item["price"] = round(price, 2)
             item["unit_price"] = round(price / quantity, 2) if quantity > 0 else price
-        
+
+        # Verify the math: price should equal unit_price × quantity
+        calculated_total = round(item["unit_price"] * quantity, 2)
+        if abs(item["price"] - calculated_total) > 0.10:
+            logging.getLogger(__name__).warning(
+                f"Item '{item.get('name')}': math mismatch, price=${item['price']:.2f} vs calculated=${calculated_total:.2f}"
+            )
+
+        # Add to items_total (price is LINE TOTAL)
+        items_total += item["price"]
+
         # Ensure category exists
         if "category" not in item:
             item["category"] = categorize_item(item.get("name", ""), merchant)
-        
+
         if corrections_made:
             logging.getLogger(__name__).info(f"Item '{item.get('name')}' corrections: {corrections_made}")
-        
+
         corrected_items.append(item)
     
     receipt_data["items"] = corrected_items
@@ -1230,39 +1260,42 @@ async def extract_receipt_data(image_bytes: bytes) -> Dict:
         # Step 2: Use Gemini to parse the text into structured data
         prompt = f"""You are a receipt data extractor. Extract ONLY the following information from this receipt text in JSON format.
 
-CRITICAL GUARDRAILS FOR ACCURACY:
-1. ITEM COUNTS: Verify the quantity of each item makes logical sense:
-   - Quantity must be a positive integer (1, 2, 3, etc.)
-   - Typical receipts have 1-20 items (flag anything unusual)
-   - Quantity should be explicit in the receipt, not assumed
+CRITICAL: UNDERSTANDING RECEIPT FORMAT
+Most receipts show items in this format:
+  QTY  ITEM_NAME       LINE_TOTAL
+  3    APPLES          $3.00        <- This means 3 apples costing $3.00 total ($1.00 each)
+  6    BANANAS         $2.40        <- This means 6 bananas costing $2.40 total ($0.40 each)
 
-2. PRICING VALIDATION (before tax):
-   - Each item price must be a positive number (e.g., 5.99)
-   - Line total = quantity × unit price (verify this calculation)
-   - Subtotal = sum of all line totals (verify this matches)
-   - Individual item prices rarely exceed $500 (flag outliers)
-   - Prices below $0.01 are likely OCR errors (use $0.00 instead)
+The dollar amount shown is the LINE TOTAL (quantity × unit price), NOT the unit price!
 
-3. TAX CONSISTENCY:
-   - Tax = subtotal × tax_rate (typical US rates: 5-10%)
-   - Tax must be positive
-   - Total = subtotal + tax (exactly)
-   - If tax rate > 15%, review the number - likely an error
+EXTRACTION RULES:
+1. "price" field = LINE TOTAL (the actual dollar amount shown on that receipt line)
+2. "unit_price" field = LINE TOTAL ÷ quantity (calculate this yourself)
+3. "quantity" field = the number of items purchased (the leading number)
 
-4. VALIDATION EXAMPLES:
-   ✓ CORRECT: 4 Cheese Burgers @ $5.99 each = $23.96 (quantity=4, price=23.96)
-   ✗ WRONG: 4 Cheese Burgers = $5.99 (contradictory - 4 items shouldn't cost $5.99)
-   ✓ CORRECT: Subtotal $23.96 + Tax $1.92 = Total $25.88
-   ✗ WRONG: Subtotal $23.96 + Tax $50.00 = Total $73.96 (tax rate 209% - impossible)
+VALIDATION EXAMPLES:
+Receipt line: "3 APPLES $3.00"
+  CORRECT: {{"name": "APPLES", "quantity": 3, "price": 3.00, "unit_price": 1.00}}
+  WRONG: {{"name": "APPLES", "quantity": 3, "price": 0.33}} <- This is WRONG!
+
+Receipt line: "6 BANANAS $2.40"
+  CORRECT: {{"name": "BANANAS", "quantity": 6, "price": 2.40, "unit_price": 0.40}}
+  WRONG: {{"name": "BANANAS", "quantity": 6, "price": 0.07}} <- This is WRONG!
+
+MATH VERIFICATION:
+- price = unit_price × quantity (this MUST be true)
+- subtotal = sum of all item "price" fields
+- total = subtotal + tax
 
 REQUIRED JSON OUTPUT FORMAT:
 {{
-    "merchant": "store name (must be present)",
-    "date": "YYYY-MM-DD format (must be present)",
+    "merchant": "store name",
+    "date": "YYYY-MM-DD",
     "items": [
         {{
             "name": "item name",
             "price": 0.00,
+            "unit_price": 0.00,
             "quantity": 1,
             "category": "groceries|restaurant|retail|pharmacy|other"
         }}
@@ -1274,12 +1307,11 @@ REQUIRED JSON OUTPUT FORMAT:
 }}
 
 STRICT RULES:
-1. merchant and date are REQUIRED - if missing, set to "Unknown"
-2. Extract ALL items with prices and quantities
-3. Prices and quantities must be numbers without $ symbols
-4. If a field is unclear, use null or "unknown"
+1. "price" is ALWAYS the LINE TOTAL shown on the receipt (NOT unit price per item)
+2. Calculate unit_price = price ÷ quantity
+3. Verify: price should equal unit_price × quantity
+4. Extract ALL items with their quantities and LINE TOTALS
 5. Return ONLY valid JSON, no extra text
-6. Categorize items based on merchant and item names
 
 Receipt Text:
 {receipt_text}
@@ -1303,6 +1335,14 @@ JSON Output:"""
 
         receipt_data = json.loads(response_text.strip())
 
+        # Log raw Gemini response for debugging
+        logging.getLogger(__name__).info("=== RAW GEMINI RESPONSE ===")
+        for item in receipt_data.get("items", []):
+            logging.getLogger(__name__).info(
+                f"  Item: {item.get('name')} | qty={item.get('quantity')} | price={item.get('price')} | unit_price={item.get('unit_price')}"
+            )
+        logging.getLogger(__name__).info(f"  Subtotal: {receipt_data.get('subtotal')} | Tax: {receipt_data.get('tax')} | Total: {receipt_data.get('total')}")
+
         # Validate and set defaults for required fields (don't raise errors, just log warnings)
         if not receipt_data.get("merchant") or receipt_data.get("merchant") == "Unknown":
             logging.getLogger(__name__).warning("Merchant not identified, defaulting to 'Unknown Store'")
@@ -1310,6 +1350,13 @@ JSON Output:"""
 
         # Apply guardrails to validate and correct receipt data
         receipt_data = validate_and_correct_receipt(receipt_data, receipt_data.get("merchant", ""))
+
+        # Log after validation
+        logging.getLogger(__name__).info("=== AFTER VALIDATION ===")
+        for item in receipt_data.get("items", []):
+            logging.getLogger(__name__).info(
+                f"  Item: {item.get('name')} | qty={item.get('quantity')} | price={item.get('price')} | unit_price={item.get('unit_price')}"
+            )
 
         if not receipt_data.get("items") or len(receipt_data.get("items", [])) == 0:
             logging.getLogger(__name__).warning("Gemini returned no items - falling back to local OCR parser")
@@ -1352,9 +1399,9 @@ JSON Output:"""
         error_str = str(e)
         logging.getLogger(__name__).exception("Error extracting receipt data: %s", e)
         
-        # Check if it's a quota error - use local OCR parser
-        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
-            logging.getLogger(__name__).warning("Gemini API quota exhausted - using local OCR parser")
+        # Check if it's a quota error, server overload, or API issue - use local OCR parser
+        if "429" in error_str or "503" in error_str or "RESOURCE_EXHAUSTED" in error_str or "UNAVAILABLE" in error_str or "quota" in error_str.lower() or "overloaded" in error_str.lower():
+            logging.getLogger(__name__).warning("Gemini API unavailable (quota/overload/503) - using local OCR parser")
             
             # Use our improved local OCR parser
             ocr_result = parse_ocr_text_to_receipt(receipt_text)

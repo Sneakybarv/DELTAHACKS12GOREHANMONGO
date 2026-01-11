@@ -1,20 +1,25 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { FiHeart, FiAlertTriangle, FiEdit3, FiPlus, FiX, FiSave } from 'react-icons/fi'
+import { useRouter } from 'next/navigation'
+import { FiHeart, FiAlertTriangle, FiEdit3, FiPlus, FiX, FiSave, FiLogIn, FiLogOut, FiUser } from 'react-icons/fi'
 import { updateUserProfile, getDashboardStats, getReceipts, getUserProfile } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function ProfilePage() {
+  const router = useRouter()
+  const { userId, isLoggedIn, logout } = useAuth()
   const [editing, setEditing] = useState(false)
-  const [allergies, setAllergies] = useState<string[]>(['Peanuts', 'Dairy'])
-  const [dietaryPrefs, setDietaryPrefs] = useState<string[]>(['Low Sugar', 'High Protein'])
-  const [healthGoals, setHealthGoals] = useState<string[]>(['Eat more vegetables', 'Reduce sugar'])
+  const [allergies, setAllergies] = useState<string[]>([])
+  const [dietaryPrefs, setDietaryPrefs] = useState<string[]>([])
+  const [healthGoals, setHealthGoals] = useState<string[]>([])
   const [newAllergy, setNewAllergy] = useState('')
   const [newPref, setNewPref] = useState('')
   const [newGoal, setNewGoal] = useState('')
   const [totalSpent, setTotalSpent] = useState(0)
   const [totalReceipts, setTotalReceipts] = useState(0)
   const [healthScoreAvg, setHealthScoreAvg] = useState(0)
+  const [healthScoreTrend, setHealthScoreTrend] = useState<number[]>([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
 
@@ -32,6 +37,7 @@ export default function ProfilePage() {
 
         setTotalReceipts(statsData.total_receipts)
         setHealthScoreAvg(statsData.health_score_avg)
+        setHealthScoreTrend(statsData.health_score_trend || [])
 
         const total = receiptsData.receipts.reduce((sum, r: any) => sum + (r.total || 0), 0)
         setTotalSpent(total)
@@ -41,13 +47,18 @@ export default function ProfilePage() {
           setAllergies(profileData.allergies || [])
           setDietaryPrefs(profileData.dietary_preferences || [])
           setHealthGoals(profileData.health_goals || [])
+        } else {
+          // Reset to empty for new/logged-out users
+          setAllergies([])
+          setDietaryPrefs([])
+          setHealthGoals([])
         }
       } catch (error) {
         console.error('Error fetching profile data:', error)
       }
     }
     fetchData()
-  }, [])
+  }, [userId])
 
   const handleSave = async () => {
     setSaving(true)
@@ -105,34 +116,66 @@ export default function ProfilePage() {
       <div className="container mx-auto px-4 max-w-5xl">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900">Profile & Preferences</h1>
-          {!editing ? (
-            <button
-              onClick={() => setEditing(true)}
-              className="btn-primary flex items-center gap-2"
-            >
-              <FiEdit3 size={20} />
-              <span>Edit Profile</span>
-            </button>
-          ) : (
-            <div className="flex gap-2">
+          <div>
+            <h1 className="text-4xl font-bold text-gray-900">Profile & Preferences</h1>
+            {isLoggedIn && (
+              <p className="text-gray-600 mt-1 flex items-center gap-2">
+                <FiUser size={16} />
+                Logged in as: <span className="font-semibold text-blue-600">{userId}</span>
+              </p>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {isLoggedIn ? (
+              <>
+                {!editing ? (
+                  <button
+                    onClick={() => setEditing(true)}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <FiEdit3 size={20} />
+                    <span>Edit Profile</span>
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setEditing(false)}
+                      className="btn-secondary flex items-center gap-2"
+                    >
+                      <FiX size={20} />
+                      <span>Cancel</span>
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={saving}
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      <FiSave size={20} />
+                      <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => {
+                    logout()
+                    router.push('/login')
+                  }}
+                  className="btn-secondary flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100"
+                >
+                  <FiLogOut size={20} />
+                  <span>Logout</span>
+                </button>
+              </>
+            ) : (
               <button
-                onClick={() => setEditing(false)}
-                className="btn-secondary flex items-center gap-2"
-              >
-                <FiX size={20} />
-                <span>Cancel</span>
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
+                onClick={() => router.push('/login')}
                 className="btn-primary flex items-center gap-2"
               >
-                <FiSave size={20} />
-                <span>{saving ? 'Saving...' : 'Save Changes'}</span>
+                <FiLogIn size={20} />
+                <span>Login / Sign Up</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Message */}
@@ -289,6 +332,70 @@ export default function ProfilePage() {
             <div className="text-3xl font-bold text-purple-700">{healthScoreAvg}</div>
             <div className="text-sm text-purple-600 font-semibold mt-1">Avg Health Score</div>
           </div>
+        </div>
+
+        {/* Health Score Trend Graph */}
+        <div className="card p-6 bg-white rounded-lg shadow-sm">
+          <h3 className="text-xl font-semibold text-gray-900 mb-4">Health Score Trend</h3>
+          {healthScoreTrend.length > 0 ? (
+            <div className="relative h-48">
+              <svg viewBox="0 0 300 120" className="w-full h-full" preserveAspectRatio="none">
+                {/* Grid lines */}
+                <line x1="0" y1="30" x2="300" y2="30" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="0" y1="60" x2="300" y2="60" stroke="#e5e7eb" strokeWidth="1" />
+                <line x1="0" y1="90" x2="300" y2="90" stroke="#e5e7eb" strokeWidth="1" />
+
+                {/* Y-axis labels */}
+                <text x="5" y="15" className="text-xs fill-gray-500">100</text>
+                <text x="5" y="65" className="text-xs fill-gray-500">50</text>
+                <text x="5" y="115" className="text-xs fill-gray-500">0</text>
+
+                {/* Line chart */}
+                <polyline
+                  fill="none"
+                  stroke="#8b5cf6"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={healthScoreTrend
+                    .map((score, i) => {
+                      const x = 30 + (i * (270 / Math.max(healthScoreTrend.length - 1, 1)))
+                      const y = 110 - (score / 100) * 100
+                      return `${x},${y}`
+                    })
+                    .join(' ')}
+                />
+
+                {/* Data points */}
+                {healthScoreTrend.map((score, i) => {
+                  const x = 30 + (i * (270 / Math.max(healthScoreTrend.length - 1, 1)))
+                  const y = 110 - (score / 100) * 100
+                  return (
+                    <circle
+                      key={i}
+                      cx={x}
+                      cy={y}
+                      r="5"
+                      fill="#8b5cf6"
+                      stroke="white"
+                      strokeWidth="2"
+                    />
+                  )
+                })}
+              </svg>
+
+              {/* X-axis labels */}
+              <div className="flex justify-between mt-2 text-xs text-gray-500 px-6">
+                {healthScoreTrend.map((_, i) => (
+                  <span key={i}>Day {i + 1}</span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-gray-500">
+              <p>No health score data yet. Upload receipts to see your trend!</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

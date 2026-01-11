@@ -20,7 +20,7 @@ export default function ResultsPage() {
 
   if (!healthInsights || !currentReceipt) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br py-12 flex items-center justify-center">
         <div className="text-center">
           <p className="text-xl text-gray-600">Loading...</p>
         </div>
@@ -74,7 +74,7 @@ export default function ResultsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+    <div className="min-h-screen bg-gradient-to-br py-12">
       <div className="container mx-auto px-4 max-w-4xl">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -219,11 +219,11 @@ export default function ResultsPage() {
         </div>
 
         {/* Accessibility note */}
-        <div className="mt-8 p-4 bg-green-50 rounded-lg border border-green-200">
-          <h3 className="font-semibold text-green-900 mb-2 flex items-center gap-2">
+        <div className="mt-8 p-4 !bg-green-50 rounded-lg border !border-green-200">
+          <h3 className="font-semibold !text-green-900 mb-2 flex items-center gap-2">
             <span>♿</span> Results Summary Saved
           </h3>
-          <p className="text-sm text-green-800">
+          <p className="text-sm !text-green-800">
             These insights have been saved to your dashboard. You can review them anytime,
             and we'll track your health score trends over time.
           </p>

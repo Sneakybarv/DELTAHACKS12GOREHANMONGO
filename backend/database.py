@@ -204,3 +204,45 @@ async def get_user_profile(user_id: str):
     if profile:
         profile["_id"] = str(profile["_id"])
     return profile
+
+
+# User authentication functions
+async def get_auth_users_collection():
+    """Get auth_users collection for login credentials"""
+    db = Database.get_db()
+    if db is None:
+        raise RuntimeError("Database not connected. Call Database.connect_db() first.")
+    return db.auth_users
+
+
+async def create_auth_user(user_id: str, password_hash: str):
+    """Create a new auth user with ID and password hash"""
+    collection = await get_auth_users_collection()
+
+    # Check if user already exists
+    existing = await collection.find_one({"user_id": user_id})
+    if existing:
+        return None  # User already exists
+
+    doc = {
+        "user_id": user_id,
+        "password_hash": password_hash,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    result = await collection.insert_one(doc)
+    return str(result.inserted_id)
+
+
+async def get_auth_user(user_id: str):
+    """Get auth user by user_id"""
+    collection = await get_auth_users_collection()
+    user = await collection.find_one({"user_id": user_id})
+    return user
+
+
+async def verify_auth_user(user_id: str, password_hash: str):
+    """Verify user credentials"""
+    user = await get_auth_user(user_id)
+    if not user:
+        return False
+    return user.get("password_hash") == password_hash

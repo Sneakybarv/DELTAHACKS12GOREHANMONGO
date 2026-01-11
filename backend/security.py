@@ -12,6 +12,15 @@ from fastapi import Depends
 from database import validate_api_key
 import logging
 
+# Simple password hashing (lenient security for hackathon)
+def hash_password(password: str) -> str:
+    """Hash password using SHA256 - simple and lenient"""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify password against hash"""
+    return hash_password(password) == password_hash
+
 # Simple rate limiting (in-memory for hackathon, use Redis in production)
 request_counts = {}
 RATE_LIMIT = 50  # requests per minute per IP

@@ -34,12 +34,13 @@ export default function DashboardPage() {
         const receiptsData = await getReceipts(100, 0)
         setReceipts(receiptsData.receipts || [])
 
-        // Calculate spending by category
+        // Calculate spending by category (using item categories from backend)
         const categoryTotals: Record<string, number> = {}
         receiptsData.receipts?.forEach((receipt: any) => {
           receipt.items?.forEach((item: any) => {
             const category = item.category || 'other'
-            categoryTotals[category] = (categoryTotals[category] || 0) + (item.price || 0)
+            const price = item.price || (item.unit_price || 0) * (item.quantity || 1)
+            categoryTotals[category] = (categoryTotals[category] || 0) + price
           })
         })
         setSpendingByCategory(categoryTotals)
@@ -57,7 +58,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br py-12 flex items-center justify-center">
         <div className="text-xl text-gray-600">Loading dashboard...</div>
       </div>
     )
@@ -156,16 +157,17 @@ export default function DashboardPage() {
           {/* Health Score Trend */}
           <div className="card">
             <h2 className="text-2xl font-semibold mb-4">Health Score Trend</h2>
-            <div className="flex items-end justify-between gap-2 h-48">
+            <div className="flex items-end justify-between gap-2 h-48 bg-gray-50 rounded-lg p-4">
               {currentStats.health_score_trend.map((score: number, index: number) => (
-                <div key={index} className="flex-1 flex flex-col items-center gap-2">
+                <div key={index} className="flex-1 flex flex-col items-center gap-2 h-full justify-end">
                 <div
-                  className="w-full bg-blue-500 rounded-t"
-                  style={{ height: `${(score / 100) * 100}%` }}
+                  className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t transition-all hover:from-blue-600 hover:to-blue-500"
+                  style={{ height: `${Math.max((score / 100) * 100, 5)}%` }}
                   role="img"
                   aria-label={`Day ${index + 1}: Score ${score}`}
+                  title={`Score: ${score}`}
                 />
-                <div className="text-xs text-gray-600">Day {index + 1}</div>
+                <div className="text-xs text-gray-600 font-medium">Day {index + 1}</div>
                 </div>
               ))}
             </div>
@@ -191,27 +193,26 @@ export default function DashboardPage() {
                   .map(([category, amount]) => {
                     const maxAmount = Math.max(...Object.values(spendingByCategory))
                     const percentage = (amount / maxAmount) * 100
-                    const categoryIcons: Record<string, string> = {
-                      'produce': '🥬',
-                      'dairy': '🥛',
-                      'meat': '🥩',
-                      'bakery': '🍞',
-                      'snacks': '🍿',
-                      'beverages': '🥤',
-                      'other': '🛒'
+                    const categoryConfig: Record<string, { icon: string, label: string }> = {
+                      'groceries': { icon: '🛒', label: 'Groceries' },
+                      'restaurant': { icon: '🍽️', label: 'Restaurant' },
+                      'pharmacy': { icon: '💊', label: 'Pharmacy' },
+                      'retail': { icon: '🛍️', label: 'Retail' },
+                      'other': { icon: '📦', label: 'Other' }
                     }
+                    const config = categoryConfig[category] || { icon: '📦', label: category }
                     return (
                       <div key={category}>
                         <div className="flex justify-between items-center mb-1">
                           <div className="flex items-center gap-2">
-                            <span className="text-lg">{categoryIcons[category] || '🛒'}</span>
-                            <span className="font-semibold capitalize">{category}</span>
+                            <span className="text-xl">{config.icon}</span>
+                            <span className="font-semibold">{config.label}</span>
                           </div>
                           <span className="font-bold text-gray-900">${amount.toFixed(2)}</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="w-full bg-gray-200 rounded-full h-3">
                           <div
-                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full"
+                            className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all"
                             style={{ width: `${percentage}%` }}
                             role="progressbar"
                             aria-valuenow={amount}
@@ -247,7 +248,7 @@ export default function DashboardPage() {
               receipts.slice(0, 5).map((receipt: any) => (
                 <div
                   key={receipt._id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg transition-colors"
                   role="listitem"
                 >
                   <div className="flex-1">

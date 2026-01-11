@@ -35,7 +35,7 @@ export default function ReviewPage() {
     setEditingIndex(index)
     setEditName(items[index].name)
     const quantity = items[index].quantity || 1
-    const unitPrice = items[index].unit_price || (items[index].price / quantity)
+    const unitPrice = items[index].unit_price ?? 0  
     setEditUnitPrice(unitPrice.toString())
     setEditQuantity(quantity.toString())
   }
@@ -110,7 +110,7 @@ export default function ReviewPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12">
+    <div className="min-h-screen bg-gradient-to-br py-12">
       <div className="container mx-auto px-4 max-w-6xl">
         <h1 className="text-4xl font-bold text-gray-900 mb-8">Review Receipt</h1>
 
@@ -186,12 +186,13 @@ export default function ReviewPage() {
                 {items.map((item, index) => (
                   <div
                     key={index}
-                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                    className="flex items-center gap-3 p-4 rounded-lg"
                     role="listitem"
                   >
                     {editingIndex === index ? (
                       <>
-                        <div className="flex-1 space-y-2">
+                        <div className="flex-1 space-y-3">
+                          {/* Item name */}
                           <input
                             type="text"
                             value={editName}
@@ -200,37 +201,57 @@ export default function ReviewPage() {
                             placeholder="Item name"
                             aria-label="Item name"
                           />
-                          <div className="flex gap-2 items-center">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={editUnitPrice}
-                              onChange={(e) => setEditUnitPrice(e.target.value)}
-                              className="input flex-1"
-                              placeholder="Unit Price"
-                              aria-label="Unit price per item"
-                            />
-                            <span className="px-2 font-semibold">×</span>
-                            <input
-                              type="number"
-                              step="1"
-                              min="1"
-                              value={editQuantity}
-                              onChange={(e) => setEditQuantity(e.target.value)}
-                              className="input w-20"
-                              placeholder="Qty"
-                              aria-label="Item quantity"
-                            />
-                            <span className="px-2 font-semibold">=</span>
-                            <div className="px-3 py-2 bg-blue-50 rounded font-semibold text-blue-900 min-w-24">
-                              ${((parseFloat(editUnitPrice) || 0) * (parseInt(editQuantity, 10) || 1)).toFixed(2)}
+
+                          {/* Price × Qty = Total */}
+                          <div className="flex items-center gap-3">
+                            {/* Price */}
+                            <div className="flex items-center gap-1">
+                              <span className="text-sm font-semibold text-gray-600">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={editUnitPrice}
+                                onChange={(e) => setEditUnitPrice(e.target.value)}
+                                className="input w-28 text-right"
+                                placeholder="Price"
+                                aria-label="Unit price per item"
+                              />
+                            </div>
+
+                            <span className="font-semibold text-gray-700">×</span>
+
+                            {/* Quantity */}
+                            <div className="flex items-center gap-1">
+                              <span className="text-sm font-semibold text-gray-600">Qty</span>
+                              <input
+                                type="number"
+                                step="1"
+                                min="1"
+                                value={editQuantity}
+                                onChange={(e) => setEditQuantity(e.target.value)}
+                                className="input w-16 text-center"
+                                placeholder="1"
+                                aria-label="Item quantity"
+                              />
+                            </div>
+
+                            <span className="font-semibold text-gray-700">=</span>
+
+                            {/* Total */}
+                            <div className="px-4 py-2 bg-blue-100 rounded-lg font-bold text-blue-900 min-w-28 text-right">
+                              ${(
+                                (parseFloat(editUnitPrice) || 0) *
+                                (parseInt(editQuantity, 10) || 1)
+                              ).toFixed(2)}
                             </div>
                           </div>
                         </div>
+
+                        {/* Save */}
                         <button
                           onClick={saveEdit}
-                          className="btn-primary"
+                          className="btn-primary self-start"
                           aria-label="Save item"
                         >
                           <FiCheck size={20} />
@@ -241,9 +262,20 @@ export default function ReviewPage() {
                         <div className="flex-1">
                           <div className="font-semibold">{item.name}</div>
                           <div className="text-sm text-gray-600">
-                            ${((item.unit_price || (item.price / (item.quantity || 1))).toFixed(2))} × {item.quantity || 1} = ${((item.unit_price || (item.price / (item.quantity || 1))) * (item.quantity || 1)).toFixed(2)}
+                            $
+                            {(
+                              item.unit_price ||
+                              item.price / (item.quantity || 1)
+                            ).toFixed(2)}{' '}
+                            × {item.quantity || 1} = $
+                            {(
+                              (item.unit_price ||
+                                item.price / (item.quantity || 1)) *
+                              (item.quantity || 1)
+                            ).toFixed(2)}
                           </div>
                         </div>
+
                         <button
                           onClick={() => startEdit(index)}
                           className="btn-secondary"
@@ -251,6 +283,7 @@ export default function ReviewPage() {
                         >
                           <FiEdit2 size={18} />
                         </button>
+
                         <button
                           onClick={() => deleteItem(index)}
                           className="btn-danger"
@@ -301,9 +334,9 @@ export default function ReviewPage() {
         </div>
 
         {/* Instructions */}
-        <div className="mt-8 p-4 bg-blue-50 rounded-lg border border-blue-200">
-          <h3 className="font-semibold text-blue-900 mb-2">Review Instructions</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
+        <div className="mt-8 p-4 !bg-blue-50 rounded-lg border !border-blue-200">
+          <h3 className="font-semibold !text-blue-900 mb-2">Review Instructions</h3>
+          <ul className="text-sm !text-blue-800 space-y-1">
             <li>• Check that all items were extracted correctly</li>
             <li>• Edit any incorrect item names or prices</li>
             <li>• Add items that were missed by the scanner</li>

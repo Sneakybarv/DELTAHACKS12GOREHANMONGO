@@ -20,7 +20,9 @@ from security import (
     sanitize_user_input,
     validate_receipt_data,
     get_cors_origins,
-    require_api_key
+    require_api_key,
+    hash_password,
+    verify_password
 )
 from gemini_service import (
     extract_receipt_data,
@@ -32,8 +34,12 @@ from database import (
     create_receipt,
     get_receipt_by_id,
     get_all_receipts,
+    update_receipt,
     create_or_update_user_profile,
-    get_user_profile
+    get_user_profile,
+    create_auth_user,
+    get_auth_user,
+    verify_auth_user
 )
 
 app = FastAPI(
@@ -125,6 +131,14 @@ class UserProfile(BaseModel):
     dietary_preferences: List[str] = []
     health_goals: List[str] = []
 
+class AuthRegister(BaseModel):
+    user_id: str
+    password: str
+
+class AuthLogin(BaseModel):
+    user_id: str
+    password: str
+
 @app.get("/")
 async def root():
     return {
@@ -184,7 +198,11 @@ async def upload_receipt(
 
         # Attach user id if provided
         if x_user_id:
-            receipt_data["user_id"] = sanitize_user_input(x_user_id, max_length=100)
+            sanitized_user_id = sanitize_user_input(x_user_id, max_length=100)
+            receipt_data["user_id"] = sanitized_user_id
+            logging.getLogger(__name__).info(f"Receipt upload: user_id={sanitized_user_id}")
+        else:
+            logging.getLogger(__name__).info("Receipt upload: no user_id provided (anonymous)")
 
         # Try to store receipt in database
         try:
@@ -222,6 +240,7 @@ async def analyze_receipt(
 ):
     """
     Analyze receipt for health insights and allergens using Gemini AI
+    Also updates the receipt in the database with the health_score
 
     Rate limited to 50 requests per minute per IP
     """
@@ -247,6 +266,18 @@ async def analyze_receipt(
             suggestions=health_data.get("suggestions", []),
             diet_flags=health_data.get("diet_flags", {})
         )
+
+        # Save health_score back to database if receipt has an ID
+        if receipt.id and not receipt.id.startswith("temp_"):
+            try:
+                await update_receipt(receipt.id, {
+                    "health_score": insights.health_score,
+                    "allergen_alerts": insights.allergen_alerts,
+                    "health_warnings": insights.health_warnings
+                })
+                logging.getLogger(__name__).info(f"Updated receipt {receipt.id} with health_score: {insights.health_score}")
+            except Exception as db_error:
+                logging.getLogger(__name__).warning(f"Failed to update receipt {receipt.id} with health_score: {db_error}")
 
         return insights
     
@@ -314,16 +345,20 @@ async def get_receipt(
 @app.get("/api/dashboard/stats")
 async def get_dashboard_stats(
     request: Request,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id"),
     _: None = Depends(rate_limit_check)
 ):
     """
-    Get dashboard statistics for the week
+    Get dashboard statistics for the week (filtered by user if X-User-Id provided)
 
     Rate limited to 50 requests per minute per IP
     """
     try:
-        # Get all receipts
-        all_receipts_data = await get_all_receipts(limit=1000, offset=0)
+        # Get receipts (filtered by user if provided)
+        user_id = sanitize_user_input(x_user_id, max_length=100) if x_user_id else None
+        logging.getLogger(__name__).info(f"Dashboard stats: filtering by user_id={user_id}")
+        all_receipts_data = await get_all_receipts(limit=1000, offset=0, user_id=user_id)
+        logging.getLogger(__name__).info(f"Dashboard stats: found {all_receipts_data.get('total', 0)} receipts")
         receipts = all_receipts_data.get("receipts", [])
         total_receipts = all_receipts_data.get("total", 0)
 
@@ -361,17 +396,15 @@ async def get_dashboard_stats(
             if receipt.get("health_score"):
                 health_scores.append(receipt["health_score"])
 
-        # Calculate average health score
-        health_score_avg = int(sum(health_scores) / len(health_scores)) if health_scores else 50
+        # Calculate average health score (0 if no data)
+        health_score_avg = int(sum(health_scores) / len(health_scores)) if health_scores else 0
 
-        # Generate health score trend (last 7 days)
+        # Generate health score trend (last 7 days, empty array if no data)
         health_score_trend = []
         if health_scores:
             # Simple trend: use last 7 scores or repeat avg if fewer
             recent_scores = health_scores[-7:] if len(health_scores) >= 7 else health_scores
             health_score_trend = recent_scores + [health_score_avg] * (7 - len(recent_scores))
-        else:
-            health_score_trend = [50] * 7
 
         return {
             "money_at_risk": round(money_at_risk, 2),
@@ -390,9 +423,9 @@ async def get_dashboard_stats(
             "receipts_expiring_soon": 0,
             "total_receipts": 0,
             "allergen_alerts_this_week": 0,
-            "health_score_avg": 50,
+            "health_score_avg": 0,
             "paper_saved_count": 0,
-            "health_score_trend": [50] * 7
+            "health_score_trend": []
         }
 
 @app.post("/api/test-ocr")
@@ -632,6 +665,107 @@ async def issue_api_key(
     except Exception as e:
         logging.getLogger(__name__).exception('Failed to create API key: %s', e)
         raise HTTPException(status_code=500, detail='Failed to create API key')
+
+
+# ==================== AUTH ENDPOINTS ====================
+
+@app.post("/api/auth/register")
+async def register_user(
+    auth_data: AuthRegister,
+    request: Request,
+    _: None = Depends(rate_limit_check)
+):
+    """
+    Register a new user with user_id and password
+    """
+    try:
+        # Sanitize user_id
+        user_id = sanitize_user_input(auth_data.user_id, max_length=50)
+
+        if not user_id or len(user_id) < 3:
+            raise HTTPException(status_code=400, detail="User ID must be at least 3 characters")
+
+        if not auth_data.password or len(auth_data.password) < 4:
+            raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+
+        # Hash password
+        password_hash = hash_password(auth_data.password)
+
+        # Create user
+        result = await create_auth_user(user_id, password_hash)
+
+        if result is None:
+            raise HTTPException(status_code=400, detail="User ID already exists")
+
+        return {
+            "status": "success",
+            "message": "User registered successfully",
+            "user_id": user_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error registering user: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to register user")
+
+
+@app.post("/api/auth/login")
+async def login_user(
+    auth_data: AuthLogin,
+    request: Request,
+    _: None = Depends(rate_limit_check)
+):
+    """
+    Login with user_id and password
+    """
+    try:
+        # Sanitize user_id
+        user_id = sanitize_user_input(auth_data.user_id, max_length=50)
+
+        if not user_id:
+            raise HTTPException(status_code=400, detail="User ID is required")
+
+        if not auth_data.password:
+            raise HTTPException(status_code=400, detail="Password is required")
+
+        # Get user and verify password
+        user = await get_auth_user(user_id)
+
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid user ID or password")
+
+        if not verify_password(auth_data.password, user.get("password_hash", "")):
+            raise HTTPException(status_code=401, detail="Invalid user ID or password")
+
+        return {
+            "status": "success",
+            "message": "Login successful",
+            "user_id": user_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error logging in: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to login")
+
+
+@app.get("/api/auth/check/{user_id}")
+async def check_user_exists(
+    user_id: str,
+    request: Request,
+    _: None = Depends(rate_limit_check)
+):
+    """
+    Check if a user_id exists (for registration validation)
+    """
+    try:
+        user_id = sanitize_user_input(user_id, max_length=50)
+        user = await get_auth_user(user_id)
+        return {"exists": user is not None}
+    except Exception as e:
+        logging.getLogger(__name__).exception("Error checking user: %s", e)
+        raise HTTPException(status_code=500, detail="Failed to check user")
+
 
 if __name__ == "__main__":
     import uvicorn
