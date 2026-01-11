@@ -15,7 +15,7 @@ Receipt Scanner helps users with visual impairments, dyslexia, ADHD, motor limit
 
 ### Our Solution
 - **Read-aloud mode**: Full receipt summaries with text-to-speech
-- **High contrast & large text**: Customizable visual modes
+- **Dark mode & large text**: Customizable visual modes
 - **Simple, error-tolerant UI**: Big buttons, minimal taps
 - **Voice input**: Navigate hands-free (planned)
 - **Smart health analysis**: AI-powered allergen detection and nutrition insights
@@ -196,13 +196,6 @@ npm install -g lighthouse
 # Run accessibility audit
 lighthouse http://localhost:3000 --only-categories=accessibility --view
 ```
-
-### Manual Testing
-- Screen readers: NVDA, JAWS, VoiceOver
-- Keyboard-only navigation
-- Color contrast checker
-- Mobile touch targets
-
 
 ## 📄 License
 
