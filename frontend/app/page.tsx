@@ -29,7 +29,7 @@ export default function Home() {
   const pageDescription = "BiteWise. An accessible tool that turns food receipts into health insights. Upload any grocery or restaurant receipt. We flag allergens, highlight nutrition risks, and summarize your week."
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br">
       <div className="container mx-auto px-4 py-12 max-w-6xl">
         {/* Header with read-aloud button */}
         <div className="relative mb-8">
