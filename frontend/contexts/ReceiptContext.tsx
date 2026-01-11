@@ -5,6 +5,7 @@ import React, { createContext, useContext, useState, ReactNode } from 'react'
 export interface ReceiptItem {
   name: string
   price: number
+  quantity?: number
   category?: string
   allergens?: string[]
   health_flags?: string[]

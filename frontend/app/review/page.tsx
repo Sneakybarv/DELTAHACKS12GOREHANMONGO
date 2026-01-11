@@ -16,6 +16,7 @@ export default function ReviewPage() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
   const [editPrice, setEditPrice] = useState('')
+  const [editQuantity, setEditQuantity] = useState('1')
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -34,6 +35,7 @@ export default function ReviewPage() {
     setEditingIndex(index)
     setEditName(items[index].name)
     setEditPrice(items[index].price.toString())
+    setEditQuantity((items[index].quantity || 1).toString())
   }
 
   const saveEdit = () => {
@@ -43,6 +45,7 @@ export default function ReviewPage() {
         ...updatedItems[editingIndex],
         name: editName,
         price: parseFloat(editPrice) || 0,
+        quantity: parseInt(editQuantity, 10) || 1,
       }
       setItems(updatedItems)
       setEditingIndex(null)
@@ -57,7 +60,7 @@ export default function ReviewPage() {
   }
 
   const addItem = () => {
-    setItems([...items, { name: 'New Item', price: 0, category: 'other' }])
+    setItems([...items, { name: 'New Item', price: 0, quantity: 1, category: 'other' }])
     announceToScreenReader('New item added')
   }
 
@@ -191,15 +194,27 @@ export default function ReviewPage() {
                             placeholder="Item name"
                             aria-label="Item name"
                           />
-                          <input
-                            type="number"
-                            step="0.01"
-                            value={editPrice}
-                            onChange={(e) => setEditPrice(e.target.value)}
-                            className="input"
-                            placeholder="Price"
-                            aria-label="Item price"
-                          />
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              step="1"
+                              min={1}
+                              value={editQuantity}
+                              onChange={(e) => setEditQuantity(e.target.value)}
+                              className="input w-24"
+                              placeholder="Qty"
+                              aria-label="Item quantity"
+                            />
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editPrice}
+                              onChange={(e) => setEditPrice(e.target.value)}
+                              className="input flex-1"
+                              placeholder="Price (line total)"
+                              aria-label="Item price"
+                            />
+                          </div>
                         </div>
                         <button
                           onClick={saveEdit}
@@ -212,8 +227,8 @@ export default function ReviewPage() {
                     ) : (
                       <>
                         <div className="flex-1">
-                          <div className="font-semibold">{item.name}</div>
-                          <div className="text-gray-600">${item.price.toFixed(2)}</div>
+                          <div className="font-semibold">{item.name} <span className="text-sm text-gray-500">×{item.quantity || 1}</span></div>
+                          <div className="text-gray-600">${(item.price || 0).toFixed(2)}</div>
                         </div>
                         <button
                           onClick={() => startEdit(index)}
