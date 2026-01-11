@@ -2,6 +2,12 @@
 
 An accessibility-first receipt scanner that transforms grocery and restaurant receipts into personalized health insights. Built for **DeltaHacks** with a focus on making health information accessible to everyone.
 
+## 👥 Team Members
+Barzin Vazifedoost
+Jason Yang
+Rehan Patel
+Pritika Lahiri
+
 ## Project Overview
 
 **Category Focus**: Best Accessibility Hack / Best Health Hack
@@ -200,12 +206,6 @@ lighthouse http://localhost:3000 --only-categories=accessibility --view
 ## 📄 License
 
 MIT License - Free for all to use and modify
-
-
-## 👥 Team
-
-Built for DeltaHacks 2026
-
 
 ## 🙏 Acknowledgments
 
