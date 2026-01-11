@@ -1,10 +1,10 @@
-# 🧾 Receipt Scanner - Accessible Health Insights
+# 🧾 BiteWise - Accessible Health Insights
 
 An accessibility-first receipt scanner that transforms grocery and restaurant receipts into personalized health insights. Built for **DeltaHacks** with a focus on making health information accessible to everyone.
 
 ## 🎯 Project Overview
 
-**Category Focus**: Best Accessibility Hack
+**Category Focus**: Best Accessibility Hack / Best Health Hack
 
 Receipt Scanner helps users with visual impairments, dyslexia, ADHD, motor limitations, and cognitive challenges understand their food purchases and make healthier choices.
 
@@ -22,15 +22,11 @@ Receipt Scanner helps users with visual impairments, dyslexia, ADHD, motor limit
 
 ## ✨ Features
 
-### Accessibility (Primary Focus)
+### Accessibility
 - ♿ Full screen reader support with ARIA labels
-- ⌨️ Complete keyboard navigation
-- 🎨 High contrast mode for low vision users
 - 🔤 Large text mode with scalable fonts
-- 🔊 Text-to-speech for all content
 - 🌓 Dark mode option
 - 📱 Touch-friendly (44px+ tap targets)
-- 🎯 WCAG 2.1 AA compliant
 
 ### Health Insights
 - 🚨 Allergen alerts (dairy, nuts, gluten, etc.)
@@ -224,4 +220,3 @@ Built for DeltaHacks 2026
 - **Google Gemini** - AI-powered OCR and analysis
 - **MongoDB Atlas** - Database platform
 - **MLH** - Hackathon support and API access
-- **DeltaHacks** - Organizing this amazing event
