@@ -15,7 +15,7 @@ export default function ReviewPage() {
   const [date, setDate] = useState(currentReceipt?.date || '')
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editName, setEditName] = useState('')
-  const [editPrice, setEditPrice] = useState('')
+  const [editUnitPrice, setEditUnitPrice] = useState('')
   const [editQuantity, setEditQuantity] = useState('1')
   const [analyzing, setAnalyzing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,18 +34,24 @@ export default function ReviewPage() {
   const startEdit = (index: number) => {
     setEditingIndex(index)
     setEditName(items[index].name)
-    setEditPrice(items[index].price.toString())
-    setEditQuantity((items[index].quantity || 1).toString())
+    const quantity = items[index].quantity || 1
+    const unitPrice = items[index].unit_price || (items[index].price / quantity)
+    setEditUnitPrice(unitPrice.toString())
+    setEditQuantity(quantity.toString())
   }
 
   const saveEdit = () => {
     if (editingIndex !== null) {
+      const unitPrice = parseFloat(editUnitPrice) || 0
+      const quantity = parseInt(editQuantity, 10) || 1
+      const lineTotal = unitPrice * quantity
       const updatedItems = [...items]
       updatedItems[editingIndex] = {
         ...updatedItems[editingIndex],
         name: editName,
-        price: parseFloat(editPrice) || 0,
-        quantity: parseInt(editQuantity, 10) || 1,
+        unit_price: unitPrice,
+        quantity: quantity,
+        price: lineTotal,
       }
       setItems(updatedItems)
       setEditingIndex(null)
@@ -60,7 +66,7 @@ export default function ReviewPage() {
   }
 
   const addItem = () => {
-    setItems([...items, { name: 'New Item', price: 0, quantity: 1, category: 'other' }])
+    setItems([...items, { name: 'New Item', unit_price: 0, quantity: 1, price: 0, category: 'other' }])
     announceToScreenReader('New item added')
   }
 
@@ -76,7 +82,7 @@ export default function ReviewPage() {
         merchant,
         date,
         items,
-        total: items.reduce((sum, item) => sum + (item.price || 0), 0)
+        total: items.reduce((sum, item) => sum + ((item.unit_price || 0) * (item.quantity || 1)), 0)
       }
       setCurrentReceipt(updatedReceipt)
 
@@ -194,26 +200,32 @@ export default function ReviewPage() {
                             placeholder="Item name"
                             aria-label="Item name"
                           />
-                          <div className="flex gap-2">
-                            <input
-                              type="number"
-                              step="1"
-                              min={1}
-                              value={editQuantity}
-                              onChange={(e) => setEditQuantity(e.target.value)}
-                              className="input w-24"
-                              placeholder="Qty"
-                              aria-label="Item quantity"
-                            />
+                          <div className="flex gap-2 items-center">
                             <input
                               type="number"
                               step="0.01"
-                              value={editPrice}
-                              onChange={(e) => setEditPrice(e.target.value)}
+                              min="0"
+                              value={editUnitPrice}
+                              onChange={(e) => setEditUnitPrice(e.target.value)}
                               className="input flex-1"
-                              placeholder="Price (line total)"
-                              aria-label="Item price"
+                              placeholder="Unit Price"
+                              aria-label="Unit price per item"
                             />
+                            <span className="px-2 font-semibold">×</span>
+                            <input
+                              type="number"
+                              step="1"
+                              min="1"
+                              value={editQuantity}
+                              onChange={(e) => setEditQuantity(e.target.value)}
+                              className="input w-20"
+                              placeholder="Qty"
+                              aria-label="Item quantity"
+                            />
+                            <span className="px-2 font-semibold">=</span>
+                            <div className="px-3 py-2 bg-blue-50 rounded font-semibold text-blue-900 min-w-24">
+                              ${((parseFloat(editUnitPrice) || 0) * (parseInt(editQuantity, 10) || 1)).toFixed(2)}
+                            </div>
                           </div>
                         </div>
                         <button
@@ -227,8 +239,10 @@ export default function ReviewPage() {
                     ) : (
                       <>
                         <div className="flex-1">
-                          <div className="font-semibold">{item.name} <span className="text-sm text-gray-500">×{item.quantity || 1}</span></div>
-                          <div className="text-gray-600">${(item.price || 0).toFixed(2)}</div>
+                          <div className="font-semibold">{item.name}</div>
+                          <div className="text-sm text-gray-600">
+                            ${((item.unit_price || (item.price / (item.quantity || 1))).toFixed(2))} × {item.quantity || 1} = ${((item.unit_price || (item.price / (item.quantity || 1))) * (item.quantity || 1)).toFixed(2)}
+                          </div>
                         </div>
                         <button
                           onClick={() => startEdit(index)}
@@ -252,8 +266,8 @@ export default function ReviewPage() {
 
               <div className="mt-4 pt-4 border-t-2 border-gray-300">
                 <div className="flex justify-between items-center text-xl font-bold">
-                  <span>Total</span>
-                  <span>${items.reduce((sum, item) => sum + item.price, 0).toFixed(2)}</span>
+                  <span>Total (Subtotal)</span>
+                  <span>${items.reduce((sum, item) => sum + ((item.unit_price || (item.price / (item.quantity || 1))) * (item.quantity || 1)), 0).toFixed(2)}</span>
                 </div>
               </div>
             </div>

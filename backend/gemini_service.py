@@ -224,6 +224,10 @@ def validate_and_correct_receipt(receipt_data: Dict, merchant: str = "") -> Dict
         item_line_total = round(quantity * price, 2)
         items_total += item_line_total
         
+        # Ensure unit_price is set (if not present, calculate from price/quantity)
+        if "unit_price" not in item:
+            item["unit_price"] = round(price / quantity, 2) if quantity > 0 else price
+        
         # Ensure category exists
         if "category" not in item:
             item["category"] = categorize_item(item.get("name", ""), merchant)
@@ -508,8 +512,9 @@ def _extract_items_smart(receipt_text: str, merchant: str) -> List[Dict]:
                                     logging.getLogger(__name__).info(f"✓ Pattern 1: {item_name} x{quantity} = ${line_total}")
                                     items.append({
                                         "name": item_name[:50],
-                                        "price": line_total,
+                                        "unit_price": unit_price,
                                         "quantity": quantity,
+                                        "price": line_total,
                                         "category": categorize_item(item_name, merchant)
                                     })
                                     price_list.append(line_total)
@@ -545,10 +550,12 @@ def _extract_items_smart(receipt_text: str, merchant: str) -> List[Dict]:
                         
                         if len(item_name) >= 2 and re.search(r'[a-zA-Z]{2,}', item_name):
                             logging.getLogger(__name__).info(f"✓ Pattern 2: {item_name} = ${price_value}")
+                            unit_price = price_value / quantity if quantity > 0 else price_value
                             items.append({
                                 "name": item_name[:50],
-                                "price": price_value,
+                                "unit_price": unit_price,
                                 "quantity": quantity,
+                                "price": price_value,
                                 "category": categorize_item(item_name, merchant)
                             })
                             price_list.append(price_value)
@@ -568,10 +575,12 @@ def _extract_items_smart(receipt_text: str, merchant: str) -> List[Dict]:
                     item_name = re.sub(r'\s+', ' ', item_name).strip()
                     if len(item_name) >= 2 and re.search(r'[a-zA-Z]{2,}', item_name):
                         logging.getLogger(__name__).info(f"✓ Pattern 3: {quantity}x {item_name} = ${line_total}")
+                        unit_price = line_total / quantity if quantity > 0 else line_total
                         items.append({
                             "name": item_name[:50],
-                            "price": line_total,
+                            "unit_price": unit_price,
                             "quantity": quantity,
+                            "price": line_total,
                             "category": categorize_item(item_name, merchant)
                         })
                         price_list.append(line_total)
