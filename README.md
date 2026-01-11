@@ -9,19 +9,20 @@ Barzin Vazifedoost, Jason Yang, Rehan Patel, Pritika Lahiri
 
 **Category Focus**: Best Accessibility Hack / Best Health Hack
 
-Receipt Scanner helps users with visual impairments, dyslexia, ADHD, motor limitations, and cognitive challenges understand their food purchases and make healthier choices.
+BiteWise helps users with visual impairments, dyslexia, ADHD, and cognitive challenges understand their food purchases and make healthier choices.
 
 ### The Problem
 - Physical receipts are hard to read (small text, poor contrast, fading ink)
 - People with disabilities struggle to track allergens and nutrition
 - Health insights are often inaccessible to those whoc need them most
+- Convenient and fast nutrional and financial information, no need to manually track food purchased or money spent
 
 ### Our Solution
-- **Read-aloud mode**: Full receipt summaries with text-to-speech
+- **Screen reader**: Text-to-speech descriptions
 - **Dark mode & large text**: Customizable visual modes
 - **Simple, error-tolerant UI**: Big buttons, minimal taps
-- **Voice input**: Navigate hands-free (planned)
 - **Smart health analysis**: AI-powered allergen detection and nutrition insights
+- **Voice input**: Navigate hands-free (planned)
 
 ## ✨ Features
 
@@ -30,6 +31,7 @@ Receipt Scanner helps users with visual impairments, dyslexia, ADHD, motor limit
 - Large text mode with scalable fonts
 - Dark mode option
 - Touch-friendly (44px+ tap targets)
+- Responsive layouts implemented using flexible grids and media queries
 
 ### Health Insights
 - Allergen alerts (dairy, nuts, gluten, etc.)
@@ -209,3 +211,4 @@ MIT License - Free for all to use and modify
 - **Google Gemini** - AI-powered OCR and analysis
 - **MongoDB Atlas** - Database platform
 - **MLH** - Hackathon support and API access
+- **DeltaHacks** - Hosting this event!
