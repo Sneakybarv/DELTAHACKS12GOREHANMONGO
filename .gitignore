@@ -61,6 +61,9 @@ coverage/
 logs/
 *.log
 
+# PID files
+*.pid
+
 # Ignore local runtime folders and docs output
 .local/
 docs/
