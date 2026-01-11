@@ -35,7 +35,7 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 # Example: export GEMINI_MODEL_SEQUENCE="gemini-1.5-pro,gemini-1.5-flash,gemini-2.0-flash-exp"
 DEFAULT_MODEL_SEQUENCE = os.getenv(
     "GEMINI_MODEL_SEQUENCE",
-    "gemini-2.5-flash-lite"
+    "gemini-2.5-flash-native-audio-dialog"
 ).split(",")
 
 
