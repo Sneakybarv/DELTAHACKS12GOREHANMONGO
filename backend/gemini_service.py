@@ -144,6 +144,175 @@ def categorize_item(item_name: str, merchant: str = "") -> str:
     return "other"
 
 
+def validate_and_correct_receipt(receipt_data: Dict, merchant: str = "") -> Dict:
+    """
+    Apply guardrails to receipt data to ensure correctness.
+    Validates:
+    - Quantity amounts (must be positive integers)
+    - Item prices (must be positive, reasonable values)
+    - Price calculations (subtotal should sum to total before tax)
+    - Tax rate consistency
+    
+    Args:
+        receipt_data: Raw receipt data from AI
+        merchant: Store name for context
+        
+    Returns:
+        Corrected receipt data with validation warnings logged
+    """
+    
+    # Ensure items list exists
+    if "items" not in receipt_data or not isinstance(receipt_data["items"], list):
+        receipt_data["items"] = []
+    
+    corrected_items = []
+    items_total = 0.0
+    
+    # Validate and correct each item
+    for item in receipt_data.get("items", []):
+        if not isinstance(item, dict):
+            continue
+        
+        corrections_made = []
+        
+        # 1. Validate quantity (must be positive integer)
+        quantity = item.get("quantity", 1)
+        try:
+            quantity = int(quantity)
+            if quantity <= 0:
+                logging.getLogger(__name__).warning(f"Item '{item.get('name')}' has invalid quantity {quantity}, setting to 1")
+                quantity = 1
+                corrections_made.append("quantity_set_to_1")
+        except (ValueError, TypeError):
+            logging.getLogger(__name__).warning(f"Item '{item.get('name')}' has non-numeric quantity, setting to 1")
+            quantity = 1
+            corrections_made.append("quantity_converted_to_1")
+        
+        # Sanity check: quantity should be < 1000 (unrealistic bulk purchase)
+        if quantity > 1000:
+            logging.getLogger(__name__).warning(f"Item '{item.get('name')}' has unrealistic quantity {quantity}, capping to 100")
+            quantity = 100
+            corrections_made.append("quantity_capped")
+        
+        # 2. Validate price (must be positive, reasonable value)
+        price = item.get("price", 0.0)
+        try:
+            price = float(price)
+            if price < 0:
+                logging.getLogger(__name__).warning(f"Item '{item.get('name')}' has negative price ${price}, setting to 0.00")
+                price = 0.0
+                corrections_made.append("negative_price_set_to_zero")
+        except (ValueError, TypeError):
+            logging.getLogger(__name__).warning(f"Item '{item.get('name')}' has non-numeric price, setting to 0.00")
+            price = 0.0
+            corrections_made.append("price_non_numeric")
+        
+        # Price sanity checks:
+        # - Individual items rarely exceed $5000
+        # - Items below $0.01 are likely OCR errors
+        if price < 0.01 and price > 0:
+            logging.getLogger(__name__).warning(f"Item '{item.get('name')}' has suspiciously low price ${price:.4f}, setting to 0.00")
+            price = 0.0
+            corrections_made.append("price_too_low")
+        elif price > 5000:
+            logging.getLogger(__name__).warning(f"Item '{item.get('name')}' has suspiciously high price ${price:.2f}, likely OCR error")
+            # Don't correct automatically, just log for review
+            corrections_made.append("price_suspiciously_high")
+        
+        item["quantity"] = quantity
+        item["price"] = round(price, 2)
+        item_line_total = round(quantity * price, 2)
+        items_total += item_line_total
+        
+        # Ensure category exists
+        if "category" not in item:
+            item["category"] = categorize_item(item.get("name", ""), merchant)
+        
+        if corrections_made:
+            logging.getLogger(__name__).info(f"Item '{item.get('name')}' corrections: {corrections_made}")
+        
+        corrected_items.append(item)
+    
+    receipt_data["items"] = corrected_items
+    
+    # 3. Validate and correct financial values
+    subtotal = receipt_data.get("subtotal", 0.0)
+    tax = receipt_data.get("tax", 0.0)
+    total = receipt_data.get("total", 0.0)
+    
+    try:
+        subtotal = float(subtotal)
+        if subtotal < 0:
+            subtotal = 0.0
+    except (ValueError, TypeError):
+        subtotal = 0.0
+    
+    try:
+        tax = float(tax)
+        if tax < 0:
+            tax = 0.0
+    except (ValueError, TypeError):
+        tax = 0.0
+    
+    try:
+        total = float(total)
+        if total < 0:
+            total = 0.0
+    except (ValueError, TypeError):
+        total = 0.0
+    
+    # Validate price calculations
+    # If we have items, subtotal should roughly equal sum of items
+    if corrected_items and items_total > 0:
+        # Allow 5% tolerance for rounding errors
+        tolerance = items_total * 0.05
+        
+        if subtotal > 0 and abs(subtotal - items_total) > tolerance:
+            logging.getLogger(__name__).warning(
+                f"Subtotal ${subtotal:.2f} doesn't match items total ${items_total:.2f}, using items total"
+            )
+            subtotal = items_total
+        elif subtotal == 0:
+            logging.getLogger(__name__).info(f"Subtotal was 0, setting to items total ${items_total:.2f}")
+            subtotal = items_total
+    
+    # Validate tax rate consistency
+    # Tax should be 0-15% of subtotal (covers most US tax rates)
+    if subtotal > 0 and tax > 0:
+        tax_rate = (tax / subtotal) * 100
+        if tax_rate > 20:
+            logging.getLogger(__name__).warning(
+                f"Tax rate {tax_rate:.1f}% is suspiciously high (> 20%), reviewing"
+            )
+        if tax_rate < 0:
+            logging.getLogger(__name__).warning(f"Tax rate is negative, setting tax to 0.00")
+            tax = 0.0
+    
+    # Validate total = subtotal + tax
+    expected_total = round(subtotal + tax, 2)
+    if total > 0 and abs(total - expected_total) > 0.01:
+        logging.getLogger(__name__).warning(
+            f"Total ${total:.2f} != Subtotal ${subtotal:.2f} + Tax ${tax:.2f} (${expected_total:.2f})"
+        )
+        # Correct total to match calculation
+        total = expected_total
+    elif total == 0 and (subtotal > 0 or tax > 0):
+        logging.getLogger(__name__).info(f"Total was 0, calculating from subtotal + tax")
+        total = expected_total
+    
+    receipt_data["subtotal"] = round(subtotal, 2)
+    receipt_data["tax"] = round(tax, 2)
+    receipt_data["total"] = round(total, 2)
+    
+    # Log validation summary
+    logging.getLogger(__name__).info(
+        f"Receipt validation: {len(corrected_items)} items, "
+        f"subtotal=${subtotal:.2f}, tax=${tax:.2f}, total=${total:.2f}"
+    )
+    
+    return receipt_data
+
+
 def extract_text_from_image(image_bytes: bytes) -> str:
     """
     Extract text from receipt image using OCR
@@ -630,6 +799,9 @@ def parse_ocr_text_to_receipt(receipt_text: str) -> Dict:
         "_ocr_parsed": True
     }
     
+    # Apply guardrails to validate and correct receipt data
+    parsed = validate_and_correct_receipt(parsed, merchant)
+    
     # Add return deadline
     try:
         purchase_date = datetime.strptime(parsed["date"], "%Y-%m-%d")
@@ -638,7 +810,7 @@ def parse_ocr_text_to_receipt(receipt_text: str) -> Dict:
     except Exception:
         parsed["return_deadline"] = None
     
-    logging.getLogger(__name__).info(f"OCR parsing complete: {len(items)} items, total: ${total:.2f}")
+    logging.getLogger(__name__).info(f"OCR parsing complete: {len(parsed['items'])} items, total: ${parsed['total']:.2f}")
     return parsed
 
     merchant = "Unknown"
@@ -1047,8 +1219,34 @@ async def extract_receipt_data(image_bytes: bytes) -> Dict:
         logging.getLogger(__name__).info("Extracted text preview: %s...", receipt_text[:200].replace('\n',' '))
         
         # Step 2: Use Gemini to parse the text into structured data
-        prompt = f"""You are a receipt data extractor. Extract ONLY the following information from this receipt text in JSON format:
+        prompt = f"""You are a receipt data extractor. Extract ONLY the following information from this receipt text in JSON format.
 
+CRITICAL GUARDRAILS FOR ACCURACY:
+1. ITEM COUNTS: Verify the quantity of each item makes logical sense:
+   - Quantity must be a positive integer (1, 2, 3, etc.)
+   - Typical receipts have 1-20 items (flag anything unusual)
+   - Quantity should be explicit in the receipt, not assumed
+
+2. PRICING VALIDATION (before tax):
+   - Each item price must be a positive number (e.g., 5.99)
+   - Line total = quantity × unit price (verify this calculation)
+   - Subtotal = sum of all line totals (verify this matches)
+   - Individual item prices rarely exceed $500 (flag outliers)
+   - Prices below $0.01 are likely OCR errors (use $0.00 instead)
+
+3. TAX CONSISTENCY:
+   - Tax = subtotal × tax_rate (typical US rates: 5-10%)
+   - Tax must be positive
+   - Total = subtotal + tax (exactly)
+   - If tax rate > 15%, review the number - likely an error
+
+4. VALIDATION EXAMPLES:
+   ✓ CORRECT: 4 Cheese Burgers @ $5.99 each = $23.96 (quantity=4, price=23.96)
+   ✗ WRONG: 4 Cheese Burgers = $5.99 (contradictory - 4 items shouldn't cost $5.99)
+   ✓ CORRECT: Subtotal $23.96 + Tax $1.92 = Total $25.88
+   ✗ WRONG: Subtotal $23.96 + Tax $50.00 = Total $73.96 (tax rate 209% - impossible)
+
+REQUIRED JSON OUTPUT FORMAT:
 {{
     "merchant": "store name (must be present)",
     "date": "YYYY-MM-DD format (must be present)",
@@ -1056,6 +1254,7 @@ async def extract_receipt_data(image_bytes: bytes) -> Dict:
         {{
             "name": "item name",
             "price": 0.00,
+            "quantity": 1,
             "category": "groceries|restaurant|retail|pharmacy|other"
         }}
     ],
@@ -1067,8 +1266,8 @@ async def extract_receipt_data(image_bytes: bytes) -> Dict:
 
 STRICT RULES:
 1. merchant and date are REQUIRED - if missing, set to "Unknown"
-2. Extract ALL items with prices
-3. Prices must be numbers without $ symbols
+2. Extract ALL items with prices and quantities
+3. Prices and quantities must be numbers without $ symbols
 4. If a field is unclear, use null or "unknown"
 5. Return ONLY valid JSON, no extra text
 6. Categorize items based on merchant and item names
@@ -1100,6 +1299,9 @@ JSON Output:"""
             logging.getLogger(__name__).warning("Merchant not identified, defaulting to 'Unknown Store'")
             receipt_data["merchant"] = "Unknown Store"
 
+        # Apply guardrails to validate and correct receipt data
+        receipt_data = validate_and_correct_receipt(receipt_data, receipt_data.get("merchant", ""))
+
         if not receipt_data.get("items") or len(receipt_data.get("items", [])) == 0:
             logging.getLogger(__name__).warning("Gemini returned no items - falling back to local OCR parser")
             # Use our improved local OCR parser as fallback
@@ -1123,11 +1325,15 @@ JSON Output:"""
         receipt_data["return_policy_days"] = get_return_policy_days(receipt_data.get("merchant", ""))
 
         # Calculate return deadline
-        if receipt_data.get("date") and receipt_data.get("return_policy_days"):
+        if receipt_data.get("date") and receipt_data.get("return_policy_days") is not None:
             try:
                 purchase_date = datetime.strptime(receipt_data["date"], "%Y-%m-%d")
-                deadline = purchase_date + timedelta(days=receipt_data["return_policy_days"])
-                receipt_data["return_deadline"] = deadline.strftime("%Y-%m-%d")
+                days = receipt_data["return_policy_days"]
+                if days is not None:
+                    deadline = purchase_date + timedelta(days=days)
+                    receipt_data["return_deadline"] = deadline.strftime("%Y-%m-%d")
+                else:
+                    receipt_data["return_deadline"] = None
             except:
                 receipt_data["return_deadline"] = None
 
